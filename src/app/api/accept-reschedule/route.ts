@@ -122,17 +122,17 @@ export async function POST(request: NextRequest) {
     
     await updateDoc(bookingRef, {
       scheduledTime: optionData.suggestedTime,
-      status: 'confirmed',
+      status: 'scheduled',
       updatedAt: Timestamp.now(),
     });
     
-    console.log(`   ✓ Booking updated to ${newScheduledTime.toLocaleString()}, status: confirmed`);
+    console.log(`   ✓ Booking updated to ${newScheduledTime.toLocaleString()}, status: scheduled`);
     
     // Create updated booking object for email
     const updatedBooking: Booking = {
       ...booking,
       scheduledTime: newScheduledTime,
-      status: 'confirmed',
+      status: 'scheduled',
       updatedAt: new Date(),
     };
     
