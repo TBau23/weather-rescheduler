@@ -81,10 +81,9 @@ export function generateBookings(studentIds: string[]): any[] {
   const bookings: any[] = [];
   const now = Timestamp.now();
   
-  // Create 50 bookings with varied statuses for realistic flight school density
+  // Create 50 bookings - all scheduled (let weather check create conflicts naturally)
   const statuses: BookingStatus[] = [
-    ...Array(38).fill('scheduled'),
-    ...Array(8).fill('conflict'),
+    ...Array(46).fill('scheduled'),
     ...Array(4).fill('confirmed'),
   ];
 

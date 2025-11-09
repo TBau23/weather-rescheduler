@@ -1,4 +1,4 @@
-import { Booking, WeatherCheck } from '@/types';
+import { Booking, WeatherCheck, BookingStatus } from '@/types';
 import {
   getUpcomingBookings,
   checkWeatherForBooking,
@@ -80,32 +80,61 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
       return result;
     }
 
-    // 3. Process each booking
-    console.log(`Processing ${bookings.length} bookings...`);
+    // 3. Process bookings in parallel batches
+    console.log(`Processing ${bookings.length} bookings in parallel...`);
     if (options.forceConflict) {
       console.log(`🧪 TEST MODE: All bookings will be forced to conflict status`);
     }
     
-    for (const booking of bookings) {
-      try {
-        console.log(`\n📋 Processing booking ${booking.id} (${booking.studentName})`);
-        const bookingResult = await processBooking(booking, options.dryRun || false, options.forceConflict || false);
-
-        result.checkedBookings++;
-        if (!bookingResult.isSafe) {
-          result.unsafeBookings++;
-          result.emailsSent += bookingResult.emailsSent;
+    // Set all bookings to 'checking' status for real-time dashboard updates
+    await Promise.all(
+      bookings.map(booking => 
+        updateBookingStatus(booking.id, 'checking').catch(err => 
+          console.error(`Failed to set checking status for ${booking.id}:`, err)
+        )
+      )
+    );
+    
+    // Process bookings in parallel batches to avoid overwhelming APIs
+    const BATCH_SIZE = 10;
+    const batches = [];
+    for (let i = 0; i < bookings.length; i += BATCH_SIZE) {
+      batches.push(bookings.slice(i, i + BATCH_SIZE));
+    }
+    
+    for (const batch of batches) {
+      console.log(`\n📦 Processing batch of ${batch.length} bookings...`);
+      
+      const batchResults = await Promise.allSettled(
+        batch.map(booking => processBooking(booking, options.dryRun || false, options.forceConflict || false))
+      );
+      
+      // Collect results from batch
+      batchResults.forEach((settledResult, index) => {
+        const booking = batch[index];
+        
+        if (settledResult.status === 'fulfilled') {
+          const bookingResult = settledResult.value;
+          result.checkedBookings++;
+          
+          if (!bookingResult.isSafe) {
+            result.unsafeBookings++;
+            result.emailsSent += bookingResult.emailsSent;
+          }
+          
+          console.log(`✅ Booking ${booking.id} (${booking.studentName}) processed successfully`);
+        } else {
+          const error = settledResult.reason;
+          const errorMessage = `${booking.studentName} (${booking.id}): ${error.message}`;
+          result.errors.push(errorMessage);
+          console.error(`❌ Error processing booking ${booking.id}:`, error);
+          
+          // Log error to Firestore for monitoring
+          logBookingError(booking.id, error.message).catch(err => 
+            console.error(`Failed to log error for ${booking.id}:`, err)
+          );
         }
-
-        console.log(`✅ Booking ${booking.id} processed successfully`);
-      } catch (error: any) {
-        const errorMessage = `${booking.studentName} (${booking.id}): ${error.message}`;
-        result.errors.push(errorMessage);
-        console.error(`❌ Error processing booking ${booking.id}:`, error);
-
-        // Log error to Firestore for monitoring
-        await logBookingError(booking.id, error.message);
-      }
+      });
     }
 
     result.duration = Date.now() - startTime;
@@ -149,9 +178,12 @@ async function processBooking(booking: Booking, dryRun: boolean, forceConflict: 
     ];
   }
 
-  // 3. If safe, we're done
+  // 3. If safe, restore original status
   if (weatherCheck.isSafe) {
     console.log(`  ✅ Weather is safe for ${booking.trainingLevel} pilot`);
+    // Restore to original status (confirmed if it was confirmed, otherwise scheduled)
+    const restoredStatus: BookingStatus = booking.status === 'checking' ? 'scheduled' : booking.status;
+    await updateBookingStatus(booking.id, restoredStatus);
     return { isSafe: true, emailsSent: 0 };
   }
 

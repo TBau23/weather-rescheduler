@@ -62,33 +62,66 @@ export default function ReschedulePage() {
 
   async function fetchBookingAndOptions() {
     try {
-      // Fetch booking
-      const bookingRes = await fetch(`/api/view-data?collection=bookings&id=${bookingId}`);
-      if (!bookingRes.ok) {
-        throw new Error('Failed to fetch booking');
+      // Import Firestore functions
+      const { collection, doc, getDoc, query, where, getDocs } = await import('firebase/firestore');
+      const { db } = await import('@/lib/firebase');
+      
+      // Fetch booking from Firestore
+      const bookingRef = doc(db, 'bookings', bookingId as string);
+      const bookingSnap = await getDoc(bookingRef);
+      
+      if (!bookingSnap.exists()) {
+        throw new Error('Booking not found');
       }
-      const bookingData = await bookingRes.json();
+      
+      const bookingData = bookingSnap.data();
+      const booking: Booking = {
+        id: bookingSnap.id,
+        studentId: bookingData.studentId,
+        studentName: bookingData.studentName,
+        instructorName: bookingData.instructorName,
+        aircraftId: bookingData.aircraftId,
+        scheduledTime: bookingData.scheduledTime.toDate().toISOString(),
+        duration: bookingData.duration,
+        location: bookingData.location,
+        trainingLevel: bookingData.trainingLevel,
+        status: bookingData.status,
+      };
 
-      // Fetch reschedule options
-      const optionsRes = await fetch(`/api/view-data?collection=rescheduleOptions&bookingId=${bookingId}`);
-      if (!optionsRes.ok) {
-        throw new Error('Failed to fetch reschedule options');
+      // Fetch reschedule options from Firestore with token validation
+      const optionsQuery = query(
+        collection(db, 'rescheduleOptions'),
+        where('bookingId', '==', bookingId),
+        where('token', '==', token)
+      );
+      
+      const optionsSnap = await getDocs(optionsQuery);
+      
+      if (optionsSnap.empty) {
+        throw new Error('No reschedule options found or invalid token');
       }
-      const optionsData = await optionsRes.json();
-
-      // Filter options for this booking and sort by priority
-      const bookingOptions = optionsData.data
-        .filter((opt: any) => opt.bookingId === bookingId)
-        .map((opt: any) => ({
-          ...opt,
-          suggestedTime: new Date(opt.suggestedTime),
-        }))
+      
+      const bookingOptions = optionsSnap.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            bookingId: data.bookingId,
+            suggestedTime: data.suggestedTime.toDate(),
+            reasoning: data.reasoning,
+            priority: data.priority,
+            weatherForecast: data.weatherForecast,
+            studentAvailable: data.studentAvailable,
+            instructorAvailable: data.instructorAvailable,
+            aircraftAvailable: data.aircraftAvailable,
+          };
+        })
         .sort((a: any, b: any) => a.priority - b.priority);
 
       setState({
         loading: false,
         error: null,
-        booking: bookingData.data,
+        booking,
         options: bookingOptions,
         accepting: null,
         accepted: false,

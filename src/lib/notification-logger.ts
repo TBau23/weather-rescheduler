@@ -9,11 +9,28 @@ export async function logNotification(
   notification: Omit<Notification, 'id' | 'createdAt'>
 ): Promise<string> {
   try {
-    const notificationData = {
-      ...notification,
+    // Build notification data, excluding undefined fields (Firestore doesn't allow them)
+    const notificationData: any = {
+      bookingId: notification.bookingId,
+      studentId: notification.studentId,
+      type: notification.type,
+      recipientEmail: notification.recipientEmail,
+      subject: notification.subject,
+      htmlContent: notification.htmlContent,
+      textContent: notification.textContent,
+      status: notification.status,
       createdAt: Timestamp.now(),
       sentAt: notification.sentAt ? Timestamp.fromDate(notification.sentAt) : null,
     };
+    
+    // Only add optional fields if they are defined
+    if (notification.resendMessageId !== undefined) {
+      notificationData.resendMessageId = notification.resendMessageId;
+    }
+    
+    if (notification.error !== undefined) {
+      notificationData.error = notification.error;
+    }
 
     const docRef = await addDoc(collection(db, 'notifications'), notificationData);
     

@@ -141,18 +141,19 @@ CONSTRAINTS:
 8. Avoid suggesting times immediately after the original (weather may persist)
 
 REASONING REQUIREMENTS:
-For each suggestion, explain:
-- Why the weather is expected to be better at this time
-- Why this time works for this specific training level
-- Time-of-day weather considerations
-- Day of week patterns if relevant
+For each suggestion, provide a CONCISE explanation (2-3 sentences max):
+- State the specific availability facts (instructor, aircraft available)
+- Mention if it's soon vs later in the week
+- Note if it's a preferred time for this training level (e.g., student pilots prefer afternoon)
+- DO NOT make up weather forecasts or generic claims like "Wednesday afternoons are better"
+- Keep it factual and brief
 
 OUTPUT FORMAT:
 Return a JSON array with exactly 3 options. Each option must have:
 {
   "suggestedTime": "ISO 8601 timestamp from the available slots",
-  "reasoning": "Detailed explanation (50-100 words) covering weather, training level, and time-of-day factors",
-  "weatherLikelihood": "Expected conditions description (e.g., 'Good - expect 4000ft ceilings, 8kt winds')",
+  "reasoning": "Brief factual explanation (2-3 sentences) about availability and timing",
+  "weatherLikelihood": "Simple description (e.g., 'Typically favorable conditions for VFR flight' or 'Good for instrument training')",
   "priority": 1 (best option), 2 (good alternative), or 3 (acceptable backup),
   "studentAvailable": true,
   "instructorAvailable": true,
@@ -165,7 +166,21 @@ Priority 3 should be an acceptable backup option.
 
 IMPORTANT: Only use timestamps that EXACTLY match the start times from the "Available Time Slots" list above. Do not invent new times.
 
-Generate the 3 reschedule options now:`;
+Return ONLY valid JSON in this exact format (no additional text):
+{
+  "options": [
+    {
+      "suggestedTime": "2025-11-10T14:00:00.000Z",
+      "reasoning": "Chief Instructor Davis and N98765 are both available. This is 2 days from the original time, allowing weather patterns to change. Afternoon slot is ideal for student pilot training.",
+      "weatherLikelihood": "Typically favorable for VFR flight",
+      "priority": 1,
+      "studentAvailable": true,
+      "instructorAvailable": true,
+      "aircraftAvailable": true
+    },
+    ... two more options
+  ]
+}`;
 }
 
 /**

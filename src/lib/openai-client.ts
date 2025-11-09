@@ -99,10 +99,12 @@ export async function generateRescheduleOptionsWithAI(
     }
     
     // Parse AI response
+    console.log('OpenAI Response:', responseContent);
     const parsedResponse = JSON.parse(responseContent) as OpenAIRescheduleResponse;
     
     if (!parsedResponse.options || !Array.isArray(parsedResponse.options)) {
-      throw new Error('Invalid response format from OpenAI - missing options array');
+      console.error('Invalid OpenAI Response Format:', JSON.stringify(parsedResponse, null, 2));
+      throw new Error(`Invalid response format from OpenAI - missing options array. Got keys: ${Object.keys(parsedResponse).join(', ')}`);
     }
     
     if (parsedResponse.options.length !== 3) {
