@@ -79,13 +79,24 @@ export interface RescheduleOption {
 export interface Notification {
   id: string;
   bookingId: string;
-  type: 'cancellation' | 'reschedule' | 'confirmation';
-  recipient: string;
+  studentId: string;
+  type: 'weather_alert' | 'reschedule_options' | 'confirmation';
+  recipientEmail: string;
   subject: string;
-  body: string;
-  status: 'pending' | 'sent' | 'failed';
-  sentAt: Date | null;
-  error: string | null;
+  htmlContent: string;
+  textContent: string;
+  status: 'pending' | 'sent' | 'failed' | 'bounced';
+  resendMessageId?: string;
+  error?: string;
+  sentAt?: Date;
+  createdAt: Date;
+}
+
+// Email Send Result
+export interface SendResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
 }
 
 // Weather Minimums by Training Level
