@@ -1,6 +1,6 @@
 # Epic 2: Weather Integration
 
-**Status**: ⏳ Not Started  
+**Status**: ✅ Complete  
 **Estimated Time**: 2-3 hours  
 **Dependencies**: OpenWeatherMap API key in `.env.local`  
 **Can run parallel to**: Epic 1 (Data Foundation)

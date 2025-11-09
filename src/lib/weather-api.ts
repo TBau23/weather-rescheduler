@@ -68,20 +68,32 @@ export async function fetchWeather(
 
   console.log(`[Weather API] Fetching weather for ${lat}, ${lon}`);
 
-  const response = await fetch(url.toString());
+  // Add 10 second timeout to prevent hanging
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenWeather API error: ${response.status} - ${error}`);
+  try {
+    const response = await fetch(url.toString(), {
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenWeather API error: ${response.status} - ${error}`);
+    }
+
+    const data: OpenWeatherResponse = await response.json();
+    return parseWeatherResponse(data);
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('OpenWeather API request timed out after 10 seconds');
+    }
+    throw error;
   }
 
-  const data: OpenWeatherResponse = await response.json();
-  const conditions = parseWeatherResponse(data);
-
-  // Cache the result
-  weatherCache.set(cacheKey, { data: conditions, timestamp: Date.now() });
-
-  return conditions;
 }
 
 /**
