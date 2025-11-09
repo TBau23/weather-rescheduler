@@ -56,11 +56,13 @@ export async function getUpcomingBookings(hoursAhead: number = 24): Promise<Book
  */
 export async function checkWeatherForBooking(booking: Booking): Promise<WeatherCheck> {
   console.log(`    Fetching weather for lat: ${booking.location.lat}, lon: ${booking.location.lon}`);
+  console.log(`    Booking time: ${booking.scheduledTime.toISOString()}`);
   
-  // Fetch weather data from OpenWeatherMap
+  // Fetch weather data from OpenWeatherMap (will use forecast if booking is in future)
   const conditions = await fetchWeather(
     booking.location.lat,
-    booking.location.lon
+    booking.location.lon,
+    booking.scheduledTime
   );
 
   console.log(`    Weather fetched: ${conditions.windSpeed}kt wind, ${(conditions.visibility / 1609).toFixed(1)}mi vis`);

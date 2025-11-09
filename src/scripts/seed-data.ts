@@ -2,11 +2,28 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Student, Booking, TrainingLevel, BookingStatus } from '@/types';
 
-// Sample airports for realistic locations (focused on 3 for demo)
+// Sample airports for realistic locations with diverse weather patterns
+// Chosen to maximize likelihood of interesting weather for demos
+//
+// Note: Airport codes use ICAO format (KXXX) where:
+// - K = United States (ICAO prefix)
+// - XXX = 3-letter FAA code (e.g., SAN, SEA, ORD)
+// This is standard aviation notation - US airports always have "K" prefix in ICAO format
 const AIRPORTS = [
-  { name: 'Los Angeles LAX', code: 'KLAX', lat: 33.9416, lon: -118.4085 },
+  // California - typically good weather (safe baseline)
+  { name: 'San Diego Intl', code: 'KSAN', lat: 32.7338, lon: -117.1933 },
+  
+  // Pacific Northwest - often cloudy/rainy (good for IMC scenarios)
+  { name: 'Seattle-Tacoma Intl', code: 'KSEA', lat: 47.4502, lon: -122.3088 },
+  
+  // Midwest - variable weather, thunderstorms (good for conflicts)
   { name: 'Chicago O\'Hare', code: 'KORD', lat: 41.9742, lon: -87.9073 },
-  { name: 'Dallas/Fort Worth', code: 'KDFW', lat: 32.8998, lon: -97.0403 },
+  
+  // Mountain - wind/turbulence (good for student pilot conflicts)
+  { name: 'Denver Intl', code: 'KDEN', lat: 39.8561, lon: -104.6737 },
+  
+  // South - humid, thunderstorms common (diverse conditions)
+  { name: 'Houston Hobby', code: 'KHOU', lat: 29.6454, lon: -95.2789 },
 ];
 
 // Sample student data
@@ -90,10 +107,42 @@ export function generateStudents(): any[] {
 /**
  * Generate bookings for seeding
  * Strategy: 20 bookings total, 1-2 per student, ALL within next 24-48 hours
+ * Airports distributed strategically for diverse weather demo scenarios
+ * Ensures no instructor conflicts (same instructor at same time)
  */
 export function generateBookings(studentIds: string[]): any[] {
   const bookings: any[] = [];
   const now = Timestamp.now();
+  
+  // Track instructor availability: Map<timeSlotKey, Set<instructorName>>
+  const instructorBookings = new Map<string, Set<string>>();
+  
+  // Helper to check if instructor is available at a given time
+  const isInstructorAvailable = (instructor: string, time: Date): boolean => {
+    const timeKey = time.toISOString();
+    const bookedInstructors = instructorBookings.get(timeKey);
+    return !bookedInstructors || !bookedInstructors.has(instructor);
+  };
+  
+  // Helper to book an instructor at a time
+  const bookInstructor = (instructor: string, time: Date) => {
+    const timeKey = time.toISOString();
+    if (!instructorBookings.has(timeKey)) {
+      instructorBookings.set(timeKey, new Set());
+    }
+    instructorBookings.get(timeKey)!.add(instructor);
+  };
+  
+  // Helper to get available instructor
+  const getAvailableInstructor = (time: Date): string => {
+    for (const instructor of INSTRUCTORS) {
+      if (isInstructorAvailable(instructor, time)) {
+        return instructor;
+      }
+    }
+    // If all instructors are booked, return a random one anyway (shouldn't happen with 5 instructors)
+    return randomItem(INSTRUCTORS);
+  };
   
   // Time slot distribution for 20 bookings
   const timeSlots: ('morning' | 'afternoon' | 'nextmorning')[] = [
@@ -105,21 +154,45 @@ export function generateBookings(studentIds: string[]): any[] {
   // Shuffle time slots for variety
   timeSlots.sort(() => Math.random() - 0.5);
   
+  // Airport distribution strategy for interesting demos:
+  // - Student pilots: More sensitive airports (Seattle, Denver, Chicago)
+  // - Private pilots: Mix of all airports
+  // - Instrument/Commercial: Can handle more challenging conditions
+  const airportAssignments = [
+    // Student pilots (stricter weather minimums)
+    2, 3, 1, // Chicago, Denver, Seattle
+    
+    // Private pilots
+    0, 2, 4, // San Diego, Chicago, Houston
+    
+    // Instrument pilots
+    1, 4, // Seattle, Houston (IMC capable)
+    
+    // Commercial pilots
+    0, 3, // San Diego, Denver
+    
+    // Second round for each student
+    4, 1, 3, 0, 2, // Varied second bookings
+    1, 4, 2, 0, 3,
+  ];
+  
   // Create 20 bookings: 1-2 per student (10 students)
-  // First 10 bookings: one per student
-  // Next 10 bookings: second booking for each student
   for (let i = 0; i < 20; i++) {
     const studentIndex = i < 10 ? i : i - 10; // First pass: 0-9, second pass: 0-9 again
     const studentId = studentIds[studentIndex];
     const studentData = SAMPLE_STUDENTS[studentIndex];
-    const airport = AIRPORTS[i % 3]; // Rotate through 3 airports
+    const airport = AIRPORTS[airportAssignments[i]]; // Strategic airport assignment
     const timeSlot = timeSlots[i];
     const futureDate = getDateWithin48Hours(timeSlot);
+    
+    // Get an available instructor for this time slot
+    const instructor = getAvailableInstructor(futureDate);
+    bookInstructor(instructor, futureDate);
     
     bookings.push({
       studentId,
       studentName: studentData.name,
-      instructorName: randomItem(INSTRUCTORS),
+      instructorName: instructor,
       aircraftId: randomItem(AIRCRAFT_IDS),
       scheduledTime: Timestamp.fromDate(futureDate),
       duration: 60, // 1 hour lessons
@@ -138,6 +211,7 @@ export function generateBookings(studentIds: string[]): any[] {
   // Sort by scheduled time
   bookings.sort((a, b) => a.scheduledTime.toMillis() - b.scheduledTime.toMillis());
 
+  console.log(`   ℹ️  Generated ${bookings.length} bookings with no instructor conflicts`);
   return bookings;
 }
 

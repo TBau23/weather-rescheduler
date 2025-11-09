@@ -3,11 +3,14 @@ import { WeatherConditions } from '@/types';
 /**
  * OpenWeatherMap API Integration
  * Free tier: 1000 calls/day
- * API docs: https://openweathermap.org/current
+ * API docs: 
+ *   - Current: https://openweathermap.org/current
+ *   - Forecast: https://openweathermap.org/forecast5
  */
 
 const OPENWEATHER_API_KEY = process.env.OPENWEATHERMAP_API_KEY;
-const OPENWEATHER_BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
+const OPENWEATHER_CURRENT_URL = 'https://api.openweathermap.org/data/2.5/weather';
+const OPENWEATHER_FORECAST_URL = 'https://api.openweathermap.org/data/2.5/forecast';
 
 // Cache for weather responses (10 minute TTL)
 const weatherCache = new Map<string, { data: WeatherConditions; timestamp: number }>();
@@ -40,18 +43,69 @@ interface OpenWeatherResponse {
   dt: number; // timestamp
 }
 
+interface OpenWeatherForecastResponse {
+  list: Array<{
+    dt: number; // timestamp
+    main: {
+      temp: number;
+      feels_like: number;
+      temp_min: number;
+      temp_max: number;
+      pressure: number;
+      humidity: number;
+    };
+    weather: Array<{
+      id: number;
+      main: string;
+      description: string;
+    }>;
+    clouds: {
+      all: number; // percentage
+    };
+    wind: {
+      speed: number; // meters/sec
+      deg: number; // degrees
+      gust?: number; // meters/sec
+    };
+    visibility: number; // meters
+    pop: number; // probability of precipitation
+    dt_txt: string; // "2024-01-01 12:00:00"
+  }>;
+}
+
 /**
- * Fetch current weather conditions for a location
+ * Fetch weather conditions for a location at a specific time
+ * If targetTime is provided and is in the future, fetches forecast data
+ * Otherwise fetches current weather
+ * 
+ * @param lat - Latitude
+ * @param lon - Longitude  
+ * @param targetTime - Optional target time for the flight (uses forecast if future)
  */
 export async function fetchWeather(
   lat: number,
-  lon: number
+  lon: number,
+  targetTime?: Date
 ): Promise<WeatherConditions> {
   if (!OPENWEATHER_API_KEY) {
     throw new Error('OPENWEATHER_API_KEY is not configured');
   }
 
-  // Check cache first
+  const now = new Date();
+  const isFutureBooking = targetTime && targetTime > now;
+  
+  // Use forecast API if booking is in the future (up to 5 days)
+  if (isFutureBooking) {
+    const hoursAhead = (targetTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (hoursAhead <= 120) { // 5 days = 120 hours
+      console.log(`[Weather API] Fetching FORECAST for ${hoursAhead.toFixed(1)}h ahead at ${lat}, ${lon}`);
+      return fetchForecastWeather(lat, lon, targetTime);
+    } else {
+      console.log(`[Weather API] Booking too far in future (${hoursAhead.toFixed(0)}h), using current weather`);
+    }
+  }
+
+  // Check cache first for current weather
   const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
   const cached = weatherCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -59,14 +113,14 @@ export async function fetchWeather(
     return cached.data;
   }
 
-  // Fetch from API
-  const url = new URL(OPENWEATHER_BASE_URL);
+  // Fetch current weather from API
+  const url = new URL(OPENWEATHER_CURRENT_URL);
   url.searchParams.append('lat', lat.toString());
   url.searchParams.append('lon', lon.toString());
   url.searchParams.append('appid', OPENWEATHER_API_KEY);
   url.searchParams.append('units', 'metric'); // Celsius
 
-  console.log(`[Weather API] Fetching weather for ${lat}, ${lon}`);
+  console.log(`[Weather API] Fetching CURRENT weather for ${lat}, ${lon}`);
 
   // Add 10 second timeout to prevent hanging
   const controller = new AbortController();
@@ -85,7 +139,12 @@ export async function fetchWeather(
     }
 
     const data: OpenWeatherResponse = await response.json();
-    return parseWeatherResponse(data);
+    const conditions = parseWeatherResponse(data);
+    
+    // Cache the result
+    weatherCache.set(cacheKey, { data: conditions, timestamp: Date.now() });
+    
+    return conditions;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
@@ -93,7 +152,75 @@ export async function fetchWeather(
     }
     throw error;
   }
+}
 
+/**
+ * Fetch forecast weather for a specific time
+ * Uses 5-day/3-hour forecast API and finds closest time slot
+ */
+async function fetchForecastWeather(
+  lat: number,
+  lon: number,
+  targetTime: Date
+): Promise<WeatherConditions> {
+  const url = new URL(OPENWEATHER_FORECAST_URL);
+  url.searchParams.append('lat', lat.toString());
+  url.searchParams.append('lon', lon.toString());
+  url.searchParams.append('appid', OPENWEATHER_API_KEY);
+  url.searchParams.append('units', 'metric');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(url.toString(), {
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenWeather Forecast API error: ${response.status} - ${error}`);
+    }
+
+    const data: OpenWeatherForecastResponse = await response.json();
+    
+    // Find forecast entry closest to target time
+    const targetTimestamp = targetTime.getTime();
+    let closestEntry = data.list[0];
+    let smallestDiff = Math.abs((closestEntry.dt * 1000) - targetTimestamp);
+
+    for (const entry of data.list) {
+      const diff = Math.abs((entry.dt * 1000) - targetTimestamp);
+      if (diff < smallestDiff) {
+        smallestDiff = diff;
+        closestEntry = entry;
+      }
+    }
+
+    const hoursDiff = smallestDiff / (1000 * 60 * 60);
+    console.log(`[Weather API] Found forecast ${hoursDiff.toFixed(1)}h from target time`);
+
+    // Convert forecast entry to weather response format
+    const weatherResponse: OpenWeatherResponse = {
+      coord: { lat, lon },
+      weather: closestEntry.weather,
+      main: closestEntry.main,
+      visibility: closestEntry.visibility,
+      wind: closestEntry.wind,
+      clouds: closestEntry.clouds,
+      dt: closestEntry.dt,
+    };
+
+    return parseWeatherResponse(weatherResponse);
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('OpenWeather Forecast API request timed out after 10 seconds');
+    }
+    throw error;
+  }
 }
 
 /**

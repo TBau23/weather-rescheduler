@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [lastResult, setLastResult] = useState<any>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [demoMode, setDemoMode] = useState(false); // Toggle for forcing conflicts
 
   const selectedBooking = selectedBookingId 
     ? bookings.find(b => b.id === selectedBookingId) 
@@ -88,8 +89,8 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          forceConflict: true, // For demo purposes
-          hoursAhead: 168, // Check 1 week ahead
+          forceConflict: demoMode, // Only force conflicts in demo mode
+          hoursAhead: 48, // Check 48 hours ahead (within forecast range)
         }),
       });
 
@@ -97,10 +98,10 @@ export default function AdminDashboard() {
       
       if (data.success) {
         setLastResult(data.result);
-        showToast(
-          `Weather check complete! ${data.result.unsafeBookings} conflicts detected, ${data.result.emailsSent} emails sent.`,
-          'success'
-        );
+        const message = demoMode 
+          ? `Demo mode: ${data.result.unsafeBookings} conflicts forced, ${data.result.emailsSent} emails sent.`
+          : `Weather check complete! ${data.result.checkedBookings} checked, ${data.result.unsafeBookings} conflicts, ${data.result.emailsSent} emails sent.`;
+        showToast(message, 'success');
       } else {
         showToast(`Error: ${data.error}`, 'error');
       }
@@ -224,27 +225,40 @@ export default function AdminDashboard() {
               <h1 className="text-2xl font-bold text-gray-900">Weather Rescheduler</h1>
               <p className="text-gray-600 text-sm mt-1">Flight scheduling with AI-powered weather monitoring</p>
             </div>
-            <button
-              onClick={runWeatherCheck}
-              disabled={running || loading}
-              className={`px-5 py-2.5 rounded-lg font-semibold text-white transition-all ${
-                running || loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg active:scale-95'
-              }`}
-            >
-              {running ? (
-                <span className="flex items-center gap-2">
-                  <Loader className="w-4 h-4 animate-spin" />
-                  Running...
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={demoMode}
+                  onChange={(e) => setDemoMode(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                  Demo Mode (Force Conflicts)
                 </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <CloudRain className="w-4 h-4" />
-                  Run Weather Check
-                </span>
-              )}
-            </button>
+              </label>
+              <button
+                onClick={runWeatherCheck}
+                disabled={running || loading}
+                className={`px-5 py-2.5 rounded-lg font-semibold text-white transition-all ${
+                  running || loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg active:scale-95'
+                }`}
+              >
+                {running ? (
+                  <span className="flex items-center gap-2">
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Running...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <CloudRain className="w-4 h-4" />
+                    Run Weather Check
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
           
           {lastResult && (
@@ -300,6 +314,7 @@ export default function AdminDashboard() {
                     getStatusIcon={getStatusIcon}
                     getStatusBadge={getStatusBadge}
                     formatTime={formatTime}
+                    getTrainingLevelBadge={getTrainingLevelBadge}
                   />
                 )}
 
@@ -315,6 +330,7 @@ export default function AdminDashboard() {
                     getStatusIcon={getStatusIcon}
                     getStatusBadge={getStatusBadge}
                     formatTime={formatTime}
+                    getTrainingLevelBadge={getTrainingLevelBadge}
                   />
                 )}
 
@@ -330,6 +346,7 @@ export default function AdminDashboard() {
                     getStatusIcon={getStatusIcon}
                     getStatusBadge={getStatusBadge}
                     formatTime={formatTime}
+                    getTrainingLevelBadge={getTrainingLevelBadge}
                   />
                 )}
 
@@ -345,6 +362,7 @@ export default function AdminDashboard() {
                     getStatusIcon={getStatusIcon}
                     getStatusBadge={getStatusBadge}
                     formatTime={formatTime}
+                    getTrainingLevelBadge={getTrainingLevelBadge}
                   />
                 )}
 
@@ -360,6 +378,7 @@ export default function AdminDashboard() {
                     getStatusIcon={getStatusIcon}
                     getStatusBadge={getStatusBadge}
                     formatTime={formatTime}
+                    getTrainingLevelBadge={getTrainingLevelBadge}
                   />
                 )}
 
@@ -375,6 +394,7 @@ export default function AdminDashboard() {
                     getStatusIcon={getStatusIcon}
                     getStatusBadge={getStatusBadge}
                     formatTime={formatTime}
+                    getTrainingLevelBadge={getTrainingLevelBadge}
                   />
                 )}
               </div>
@@ -431,6 +451,19 @@ function BookingDetailPanel({
   useEffect(() => {
     if (booking.status === 'conflict') {
       loadConflictData();
+      
+      // Poll for reschedule options if they don't exist yet (AI might still be generating)
+      const pollInterval = setInterval(() => {
+        loadConflictData();
+      }, 3000); // Check every 3 seconds
+      
+      // Stop polling after 60 seconds or when options are loaded
+      const timeout = setTimeout(() => clearInterval(pollInterval), 60000);
+      
+      return () => {
+        clearInterval(pollInterval);
+        clearTimeout(timeout);
+      };
     } else {
       setRescheduleOptions([]);
       setWeatherCheck(null);
@@ -438,7 +471,11 @@ function BookingDetailPanel({
   }, [booking.id, booking.status]);
 
   const loadConflictData = async () => {
-    setLoadingOptions(true);
+    // Only show loading spinner on first load
+    if (rescheduleOptions.length === 0) {
+      setLoadingOptions(true);
+    }
+    
     try {
       const { collection, query, where, getDocs, orderBy, limit } = await import('firebase/firestore');
       const { db } = await import('@/lib/firebase');
@@ -588,12 +625,14 @@ function BookingDetailPanel({
             {loadingOptions ? (
               <div className="text-center py-8">
                 <Loader className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-600 text-sm">Loading options...</p>
+                <p className="text-gray-600 text-sm">AI is generating reschedule options...</p>
+                <p className="text-gray-400 text-xs mt-1">This may take 10-30 seconds</p>
               </div>
             ) : rescheduleOptions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p>No reschedule options available</p>
-                <p className="text-sm mt-1">Try running weather check again</p>
+              <div className="text-center py-8">
+                <Loader className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-2" />
+                <p className="text-gray-600 text-sm">Waiting for AI reschedule options...</p>
+                <p className="text-gray-400 text-xs mt-1">Checking every 3 seconds</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -724,6 +763,7 @@ function BookingGroup({
   getStatusIcon,
   getStatusBadge,
   formatTime,
+  getTrainingLevelBadge,
 }: {
   title: string;
   icon: string;
@@ -734,6 +774,7 @@ function BookingGroup({
   getStatusIcon: (status: string) => string;
   getStatusBadge: (status: string) => string;
   formatTime: (date: Date) => string;
+  getTrainingLevelBadge: (level: string) => string;
 }) {
   return (
     <div className="mb-4">
@@ -762,16 +803,19 @@ function BookingGroup({
             <div className="flex items-start gap-2">
               <span className="text-lg">{getStatusIcon(booking.status)}</span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-gray-900 truncate">
                     {booking.studentName}
                   </span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(booking.status)}`}>
-                    {booking.status}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTrainingLevelBadge(booking.trainingLevel)}`}>
+                    {booking.trainingLevel}
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 mt-1">
                   {formatTime(booking.scheduledTime)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  📍 {booking.location.name.replace(/\(K([A-Z]{3})\)/, '($1)')}
                 </p>
                 <p className="text-xs text-gray-500">
                   {booking.instructorName} • {booking.aircraftId}

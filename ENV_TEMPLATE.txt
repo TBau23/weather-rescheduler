@@ -1,0 +1,40 @@
+# =============================================================================
+# Weather Rescheduler - Environment Variables Template
+# =============================================================================
+# This file lists ALL required environment variables for deployment
+# Copy these to Vercel Dashboard → Settings → Environment Variables
+# =============================================================================
+
+# --- FIREBASE CONFIGURATION (6 variables) ---
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+
+# --- WEATHER API (1 variable) ---
+OPENWEATHERMAP_API_KEY=
+
+# --- OPENAI API (1 variable) ---
+OPENAI_API_KEY=
+
+# --- EMAIL SERVICE (1 variable) ---
+RESEND_API_KEY=
+
+# --- CRON JOB SECURITY (1 variable) ---
+# Generate with: openssl rand -base64 32
+CRON_SECRET=
+
+# --- APPLICATION URL (1 variable) ---
+# Update after deployment to your Vercel URL
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+
+# --- OPTIONAL: EMAIL CONFIGURATION ---
+FROM_EMAIL=onboarding@resend.dev
+DEMO_EMAIL=your-test-email@example.com
+
+# =============================================================================
+# TOTAL: 11 required + 2 optional = 13 environment variables
+# =============================================================================
+

@@ -96,14 +96,15 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
     );
     
     // Process bookings in parallel batches to avoid overwhelming APIs
-    const BATCH_SIZE = 10;
+    const BATCH_SIZE = 5; // Smaller batches for better AI rate limit handling
     const batches = [];
     for (let i = 0; i < bookings.length; i += BATCH_SIZE) {
       batches.push(bookings.slice(i, i + BATCH_SIZE));
     }
     
-    for (const batch of batches) {
-      console.log(`\n📦 Processing batch of ${batch.length} bookings...`);
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      console.log(`\n📦 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} bookings)...`);
       
       const batchResults = await Promise.allSettled(
         batch.map(booking => processBooking(booking, options.dryRun || false, options.forceConflict || false))
@@ -135,6 +136,8 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
           );
         }
       });
+      
+      console.log(`📊 Batch ${batchIndex + 1}/${batches.length} complete: ${result.checkedBookings}/${bookings.length} total processed, ${result.unsafeBookings} conflicts so far`);
     }
 
     result.duration = Date.now() - startTime;
@@ -221,21 +224,23 @@ async function handleUnsafeBooking(
   dryRun: boolean
 ): Promise<void> {
   // 1. Update booking status to 'conflict'
-  console.log(`   Updating booking status to 'conflict'...`);
+  console.log(`   📍 Updating booking status to 'conflict'...`);
   await updateBookingStatus(booking.id, 'conflict');
 
-  // 2. Generate AI reschedule options
-  console.log(`  Generating AI reschedule options...`);
+  // 2. Generate AI reschedule options (this is the slow step)
+  console.log(`   🤖 Generating AI reschedule options for ${booking.studentName}...`);
+  const aiStartTime = Date.now();
   const rescheduleOptions = await generateRescheduleOptions(booking, weatherCheck);
-  console.log(`  Generated ${rescheduleOptions.length} reschedule options`);
+  const aiDuration = ((Date.now() - aiStartTime) / 1000).toFixed(1);
+  console.log(`   ✅ Generated ${rescheduleOptions.length} reschedule options in ${aiDuration}s`);
 
   // 3. Send combined weather alert + reschedule notification
   if (!dryRun) {
-    console.log(`   Sending weather alert + reschedule notification...`);
+    console.log(`   📧 Sending weather alert + reschedule notification...`);
     await sendWeatherAlertWithReschedule(booking, weatherCheck, rescheduleOptions);
-    console.log(`  Notification sent successfully`);
+    console.log(`   ✅ Notification sent successfully to ${booking.studentName}`);
   } else {
-    console.log(`  🔍DRY RUN: Would send weather alert + reschedule notification`);
+    console.log(`   🔍 DRY RUN: Would send weather alert + reschedule notification`);
   }
 }
 
