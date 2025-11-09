@@ -26,16 +26,28 @@ const AIRPORTS = [
   { name: 'Houston Hobby', code: 'KHOU', lat: 29.6454, lon: -95.2789 },
 ];
 
-// Sample student data
+// Sample student data - expanded for realistic variety
 const SAMPLE_STUDENTS = [
+  // Student pilots (5)
   { name: 'Alex Thompson', trainingLevel: 'student' as TrainingLevel, email: 'alex.thompson@example.com', phone: '(555) 123-4567' },
   { name: 'Sarah Chen', trainingLevel: 'student' as TrainingLevel, email: 'sarah.chen@example.com', phone: '(555) 234-5678' },
   { name: 'Michael Rodriguez', trainingLevel: 'student' as TrainingLevel, email: 'michael.rodriguez@example.com', phone: '(555) 345-6789' },
+  { name: 'Jennifer Wilson', trainingLevel: 'student' as TrainingLevel, email: 'jennifer.wilson@example.com', phone: '(555) 111-2222' },
+  { name: 'Tom Anderson', trainingLevel: 'student' as TrainingLevel, email: 'tom.anderson@example.com', phone: '(555) 333-4444' },
+  
+  // Private pilots (5)
   { name: 'Emily Johnson', trainingLevel: 'private' as TrainingLevel, email: 'emily.johnson@example.com', phone: '(555) 456-7890' },
   { name: 'David Kim', trainingLevel: 'private' as TrainingLevel, email: 'david.kim@example.com', phone: '(555) 567-8901' },
   { name: 'Jessica Martinez', trainingLevel: 'private' as TrainingLevel, email: 'jessica.martinez@example.com', phone: '(555) 678-9012' },
+  { name: 'Chris Taylor', trainingLevel: 'private' as TrainingLevel, email: 'chris.taylor@example.com', phone: '(555) 555-6666' },
+  { name: 'Lauren White', trainingLevel: 'private' as TrainingLevel, email: 'lauren.white@example.com', phone: '(555) 777-8888' },
+  
+  // Instrument pilots (3)
   { name: 'Ryan Foster', trainingLevel: 'instrument' as TrainingLevel, email: 'ryan.foster@example.com', phone: '(555) 789-0123' },
   { name: 'Amanda Liu', trainingLevel: 'instrument' as TrainingLevel, email: 'amanda.liu@example.com', phone: '(555) 890-1234' },
+  { name: 'Mark Stevens', trainingLevel: 'instrument' as TrainingLevel, email: 'mark.stevens@example.com', phone: '(555) 999-0000' },
+  
+  // Commercial pilots (2)
   { name: 'Brandon Scott', trainingLevel: 'commercial' as TrainingLevel, email: 'brandon.scott@example.com', phone: '(555) 901-2345' },
   { name: 'Rachel Green', trainingLevel: 'commercial' as TrainingLevel, email: 'rachel.green@example.com', phone: '(555) 012-3456' },
 ];
@@ -46,6 +58,9 @@ const INSTRUCTORS = [
   'CFI Johnson',
   'CFII Williams',
   'Captain Brown',
+  'CFI Anderson',
+  'CFII Martinez',
+  'Captain Thompson',
 ];
 
 const AIRCRAFT_IDS = [
@@ -54,6 +69,9 @@ const AIRCRAFT_IDS = [
   'N24680',
   'N13579',
   'N98765',
+  'N11111',
+  'N22222',
+  'N33333',
 ];
 
 /**
@@ -106,25 +124,37 @@ export function generateStudents(): any[] {
 
 /**
  * Generate bookings for seeding
- * Strategy: 20 bookings total, 1-2 per student, ALL within next 24-48 hours
- * Airports distributed strategically for diverse weather demo scenarios
- * Ensures no instructor conflicts (same instructor at same time)
+ * Strategy: 20 bookings, 1-2 per student, ALL within next 24-48 hours
+ * Smart logic prevents:
+ * - Same instructor booked twice at same time
+ * - Same student in two different locations on same day
+ * - Students with multiple bookings same day = same location
  */
 export function generateBookings(studentIds: string[]): any[] {
   const bookings: any[] = [];
   const now = Timestamp.now();
   
-  // Track instructor availability: Map<timeSlotKey, Set<instructorName>>
+  // Track instructor availability: Map<timeKey, Set<instructorName>>
   const instructorBookings = new Map<string, Set<string>>();
   
-  // Helper to check if instructor is available at a given time
-  const isInstructorAvailable = (instructor: string, time: Date): boolean => {
+  // Track student bookings: Map<studentId, Array<{time, airportIndex}>>
+  const studentSchedule = new Map<string, Array<{time: Date, airportIndex: number}>>();
+  
+  // Helper to get available instructor
+  const getAvailableInstructor = (time: Date): string => {
     const timeKey = time.toISOString();
-    const bookedInstructors = instructorBookings.get(timeKey);
-    return !bookedInstructors || !bookedInstructors.has(instructor);
+    const bookedInstructors = instructorBookings.get(timeKey) || new Set();
+    
+    for (const instructor of INSTRUCTORS) {
+      if (!bookedInstructors.has(instructor)) {
+        return instructor;
+      }
+    }
+    // Fallback (shouldn't happen with 8 instructors)
+    return randomItem(INSTRUCTORS);
   };
   
-  // Helper to book an instructor at a time
+  // Helper to book an instructor
   const bookInstructor = (instructor: string, time: Date) => {
     const timeKey = time.toISOString();
     if (!instructorBookings.has(timeKey)) {
@@ -133,85 +163,97 @@ export function generateBookings(studentIds: string[]): any[] {
     instructorBookings.get(timeKey)!.add(instructor);
   };
   
-  // Helper to get available instructor
-  const getAvailableInstructor = (time: Date): string => {
-    for (const instructor of INSTRUCTORS) {
-      if (isInstructorAvailable(instructor, time)) {
-        return instructor;
-      }
+  // Helper to get airport for student, considering same-day bookings
+  const getAirportForStudent = (studentId: string, studentIndex: number, time: Date): number => {
+    const schedule = studentSchedule.get(studentId) || [];
+    const sameDay = time.toDateString();
+    
+    // Check if student has any bookings on the same day
+    const sameDayBookings = schedule.filter(b => b.time.toDateString() === sameDay);
+    
+    if (sameDayBookings.length > 0) {
+      // Use the same airport as the other booking(s) that day
+      console.log(`   📍 ${SAMPLE_STUDENTS[studentIndex].name} already has booking on ${sameDay}, using same airport`);
+      return sameDayBookings[0].airportIndex;
     }
-    // If all instructors are booked, return a random one anyway (shouldn't happen with 5 instructors)
-    return randomItem(INSTRUCTORS);
+    
+    // No same-day booking, assign based on training level
+    const trainingLevel = SAMPLE_STUDENTS[studentIndex].trainingLevel;
+    
+    if (trainingLevel === 'student') {
+      // Student pilots: Chicago, Denver, Seattle (more challenging)
+      return randomItem([2, 3, 1]);
+    } else if (trainingLevel === 'private') {
+      // Private pilots: Mix of all
+      return randomItem([0, 1, 2, 3, 4]);
+    } else if (trainingLevel === 'instrument') {
+      // Instrument pilots: Seattle, Houston (IMC capable)
+      return randomItem([1, 4]);
+    } else {
+      // Commercial: San Diego, Denver
+      return randomItem([0, 3]);
+    }
   };
   
-  // Time slot distribution for 20 bookings
-  const timeSlots: ('morning' | 'afternoon' | 'nextmorning')[] = [
-    ...Array(7).fill('morning'),      // Tomorrow morning
-    ...Array(8).fill('afternoon'),    // Tomorrow afternoon
-    ...Array(5).fill('nextmorning'),  // Day after morning
+  // Generate 20 bookings spread across 15 students (some get 1, some get 2)
+  const bookingCounts = [
+    1, 1, 1, 1, 1,  // Students 0-4: 1 booking each
+    2, 2, 2, 2, 2,  // Students 5-9: 2 bookings each
+    1, 1, 1, 1, 1,  // Students 10-14: 1 booking each
   ];
   
-  // Shuffle time slots for variety
-  timeSlots.sort(() => Math.random() - 0.5);
-  
-  // Airport distribution strategy for interesting demos:
-  // - Student pilots: More sensitive airports (Seattle, Denver, Chicago)
-  // - Private pilots: Mix of all airports
-  // - Instrument/Commercial: Can handle more challenging conditions
-  const airportAssignments = [
-    // Student pilots (stricter weather minimums)
-    2, 3, 1, // Chicago, Denver, Seattle
-    
-    // Private pilots
-    0, 2, 4, // San Diego, Chicago, Houston
-    
-    // Instrument pilots
-    1, 4, // Seattle, Houston (IMC capable)
-    
-    // Commercial pilots
-    0, 3, // San Diego, Denver
-    
-    // Second round for each student
-    4, 1, 3, 0, 2, // Varied second bookings
-    1, 4, 2, 0, 3,
-  ];
-  
-  // Create 20 bookings: 1-2 per student (10 students)
-  for (let i = 0; i < 20; i++) {
-    const studentIndex = i < 10 ? i : i - 10; // First pass: 0-9, second pass: 0-9 again
+  let bookingIndex = 0;
+  for (let studentIndex = 0; studentIndex < SAMPLE_STUDENTS.length && bookingIndex < 20; studentIndex++) {
     const studentId = studentIds[studentIndex];
     const studentData = SAMPLE_STUDENTS[studentIndex];
-    const airport = AIRPORTS[airportAssignments[i]]; // Strategic airport assignment
-    const timeSlot = timeSlots[i];
-    const futureDate = getDateWithin48Hours(timeSlot);
+    const numBookings = bookingCounts[studentIndex] || 1;
     
-    // Get an available instructor for this time slot
-    const instructor = getAvailableInstructor(futureDate);
-    bookInstructor(instructor, futureDate);
-    
-    bookings.push({
-      studentId,
-      studentName: studentData.name,
-      instructorName: instructor,
-      aircraftId: randomItem(AIRCRAFT_IDS),
-      scheduledTime: Timestamp.fromDate(futureDate),
-      duration: 60, // 1 hour lessons
-      location: {
-        name: `${airport.name} (${airport.code})`,
-        lat: airport.lat,
-        lon: airport.lon,
-      },
-      status: 'scheduled', // All start as scheduled (no pre-seeded conflicts)
-      trainingLevel: studentData.trainingLevel,
-      createdAt: now,
-      updatedAt: now,
-    });
+    for (let b = 0; b < numBookings && bookingIndex < 20; b++) {
+      // Generate time (distribute across tomorrow and day after)
+      const slot = bookingIndex < 10 ? 'morning' : (bookingIndex < 16 ? 'afternoon' : 'nextmorning');
+      const futureDate = getDateWithin48Hours(slot);
+      
+      // Get appropriate airport (respects same-day constraint)
+      const airportIndex = getAirportForStudent(studentId, studentIndex, futureDate);
+      const airport = AIRPORTS[airportIndex];
+      
+      // Track this booking for the student
+      if (!studentSchedule.has(studentId)) {
+        studentSchedule.set(studentId, []);
+      }
+      studentSchedule.get(studentId)!.push({ time: futureDate, airportIndex });
+      
+      // Get available instructor
+      const instructor = getAvailableInstructor(futureDate);
+      bookInstructor(instructor, futureDate);
+      
+      bookings.push({
+        studentId,
+        studentName: studentData.name,
+        instructorName: instructor,
+        aircraftId: randomItem(AIRCRAFT_IDS),
+        scheduledTime: Timestamp.fromDate(futureDate),
+        duration: 60,
+        location: {
+          name: `${airport.name} (${airport.code})`,
+          lat: airport.lat,
+          lon: airport.lon,
+        },
+        status: 'scheduled',
+        trainingLevel: studentData.trainingLevel,
+        createdAt: now,
+        updatedAt: now,
+      });
+      
+      bookingIndex++;
+    }
   }
 
   // Sort by scheduled time
   bookings.sort((a, b) => a.scheduledTime.toMillis() - b.scheduledTime.toMillis());
 
-  console.log(`   ℹ️  Generated ${bookings.length} bookings with no instructor conflicts`);
+  console.log(`   ✅ Generated ${bookings.length} realistic bookings`);
+  console.log(`   ✅ No instructor conflicts, no impossible student travel`);
   return bookings;
 }
 
