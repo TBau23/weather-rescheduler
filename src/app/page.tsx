@@ -446,29 +446,62 @@ function BookingDetailPanel({
   const [weatherCheck, setWeatherCheck] = useState<any>(null);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const pollIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  const pollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Load reschedule options and weather check if conflict
   useEffect(() => {
     if (booking.status === 'conflict') {
+      // Initial load
       loadConflictData();
       
-      // Poll for reschedule options if they don't exist yet (AI might still be generating)
-      const pollInterval = setInterval(() => {
-        loadConflictData();
-      }, 3000); // Check every 3 seconds
-      
-      // Stop polling after 60 seconds or when options are loaded
-      const timeout = setTimeout(() => clearInterval(pollInterval), 60000);
+      // Only start polling if we don't have options yet
+      if (rescheduleOptions.length === 0) {
+        console.log('🔄 Starting poll for reschedule options...');
+        
+        // Poll for reschedule options if they don't exist yet (AI might still be generating)
+        pollIntervalRef.current = setInterval(() => {
+          loadConflictData();
+        }, 3000); // Check every 3 seconds
+        
+        // Stop polling after 60 seconds
+        pollTimeoutRef.current = setTimeout(() => {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+            console.log('⏱️  Stopped polling for reschedule options (60s timeout)');
+          }
+        }, 60000);
+      }
       
       return () => {
-        clearInterval(pollInterval);
-        clearTimeout(timeout);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
       };
     } else {
       setRescheduleOptions([]);
       setWeatherCheck(null);
     }
   }, [booking.id, booking.status]);
+  
+  // Stop polling once options are loaded
+  useEffect(() => {
+    if (rescheduleOptions.length > 0 && pollIntervalRef.current) {
+      console.log('✅ Reschedule options loaded! Stopping poll.');
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
+    }
+  }, [rescheduleOptions.length]);
 
   const loadConflictData = async () => {
     // Only show loading spinner on first load

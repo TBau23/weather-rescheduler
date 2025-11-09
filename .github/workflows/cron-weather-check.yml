@@ -1,0 +1,59 @@
+# GitHub Actions Cron Job for Weather Rescheduler
+#
+# This workflow is an alternative to Vercel's built-in cron jobs (which require Pro plan).
+# It triggers the /api/cron/weather-check endpoint hourly.
+#
+# Setup:
+# 1. Go to your GitHub repo → Settings → Secrets and variables → Actions
+# 2. Add these secrets:
+#    - APP_URL: Your Vercel deployment URL (e.g., https://your-app.vercel.app)
+#    - CRON_SECRET: The same secret you set in Vercel environment variables
+# 3. Push this file to your repo
+# 4. GitHub Actions will run it hourly automatically
+
+name: Hourly Weather Check
+
+on:
+  # Run every hour at minute 0
+  schedule:
+    - cron: '0 * * * *'
+  
+  # Allow manual triggering for testing
+  workflow_dispatch:
+
+jobs:
+  trigger-weather-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Trigger Weather Check Endpoint
+        run: |
+          echo "Triggering weather check at $(date)"
+          
+          response=$(curl -s -w "\n%{http_code}" \
+            -X GET "${{ secrets.APP_URL }}/api/cron/weather-check" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response Code: $http_code"
+          echo "Response Body: $body"
+          
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Weather check completed successfully"
+            exit 0
+          else
+            echo "❌ Weather check failed with status $http_code"
+            echo "$body"
+            exit 1
+          fi
+      
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "⚠️ Weather check cron job failed!"
+          echo "Check the logs above for details."
+          echo "Verify APP_URL and CRON_SECRET are correctly set in GitHub Secrets."
+
