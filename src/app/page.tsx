@@ -804,7 +804,7 @@ function BookingGroup({
   bookings: Booking[];
   selectedBookingId: string | null;
   setSelectedBookingId: (id: string) => void;
-  getStatusIcon: (status: string) => string;
+  getStatusIcon: (status: string) => React.ReactElement;
   getStatusBadge: (status: string) => string;
   formatTime: (date: Date) => string;
   getTrainingLevelBadge: (level: string) => string;

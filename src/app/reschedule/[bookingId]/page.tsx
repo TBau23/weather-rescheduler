@@ -16,6 +16,7 @@ interface RescheduleOption {
 
 interface Booking {
   id: string;
+  studentId: string;
   studentName: string;
   instructorName: string;
   aircraftId: string;
@@ -25,6 +26,8 @@ interface Booking {
   };
   trainingLevel: string;
   status: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface PageState {
@@ -82,10 +85,11 @@ export default function ReschedulePage() {
         instructorName: bookingData.instructorName,
         aircraftId: bookingData.aircraftId,
         scheduledTime: bookingData.scheduledTime.toDate().toISOString(),
-        duration: bookingData.duration,
         location: bookingData.location,
         trainingLevel: bookingData.trainingLevel,
         status: bookingData.status,
+        createdAt: bookingData.createdAt.toDate().toISOString(),
+        updatedAt: bookingData.updatedAt.toDate().toISOString(),
       };
 
       // Fetch reschedule options from Firestore with token validation
@@ -312,8 +316,8 @@ export default function ReschedulePage() {
                 </div>
 
                 <div className="mb-4 space-y-2 text-sm text-gray-600">
-                  <p>✓ {state.booking.instructorName} available</p>
-                  <p>✓ Aircraft {state.booking.aircraftId} available</p>
+                  <p>✓ {state.booking?.instructorName} available</p>
+                  <p>✓ Aircraft {state.booking?.aircraftId} available</p>
                   <p>✓ Weather forecast: {option.weatherForecast}</p>
                 </div>
 

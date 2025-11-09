@@ -75,32 +75,49 @@ const AIRCRAFT_IDS = [
 ];
 
 /**
- * Generate date within next 24-48 hours (all bookings meaningful for weather check)
+ * Generate fixed time slots for deterministic, conflict-free seed data
+ * Creates 20+ unique time slots across 2 days
  */
-function getDateWithin48Hours(preferredSlot: 'morning' | 'afternoon' | 'nextmorning'): Date {
+function generateFixedTimeSlots(): Date[] {
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
   
-  if (preferredSlot === 'morning') {
-    // Tomorrow morning: 8am-12pm
-    const hour = 8 + Math.floor(Math.random() * 4);
-    tomorrow.setHours(hour, 0, 0, 0);
-    return tomorrow;
-  } else if (preferredSlot === 'afternoon') {
-    // Tomorrow afternoon: 1pm-5pm
-    const hour = 13 + Math.floor(Math.random() * 4);
-    tomorrow.setHours(hour, 0, 0, 0);
-    return tomorrow;
-  } else {
-    // Day after tomorrow morning: 8am-12pm
-    const dayAfter = new Date(tomorrow);
-    dayAfter.setDate(dayAfter.getDate() + 1);
-    const hour = 8 + Math.floor(Math.random() * 4);
-    dayAfter.setHours(hour, 0, 0, 0);
-    return dayAfter;
-  }
+  const dayAfter = new Date(tomorrow);
+  dayAfter.setDate(dayAfter.getDate() + 1);
+  
+  const slots: Date[] = [];
+  
+  // Day 1 (Tomorrow): 8am, 10am, 12pm, 2pm, 4pm (5 slots)
+  const day1Hours = [8, 10, 12, 14, 16];
+  day1Hours.forEach(hour => {
+    const slot = new Date(tomorrow);
+    slot.setHours(hour, 0, 0, 0);
+    slots.push(slot);
+  });
+  
+  // Day 2 (Day After): 8am, 10am, 12pm, 2pm, 4pm (5 slots)
+  const day2Hours = [8, 10, 12, 14, 16];
+  day2Hours.forEach(hour => {
+    const slot = new Date(dayAfter);
+    slot.setHours(hour, 0, 0, 0);
+    slots.push(slot);
+  });
+  
+  // Add more slots for flexibility (9am, 11am, 1pm, 3pm, 5pm each day)
+  const extraHours = [9, 11, 13, 15, 17];
+  extraHours.forEach(hour => {
+    const slot1 = new Date(tomorrow);
+    slot1.setHours(hour, 0, 0, 0);
+    slots.push(slot1);
+    
+    const slot2 = new Date(dayAfter);
+    slot2.setHours(hour, 0, 0, 0);
+    slots.push(slot2);
+  });
+  
+  return slots;
 }
 
 /**
@@ -124,115 +141,94 @@ export function generateStudents(): any[] {
 
 /**
  * Generate bookings for seeding
- * Strategy: 20 bookings, 1-2 per student, ALL within next 24-48 hours
- * Smart logic prevents:
- * - Same instructor booked twice at same time
- * - Same student in two different locations on same day
- * - Students with multiple bookings same day = same location
+ * Strategy: Fixed time slots, deterministic assignments, ZERO conflicts
+ * 
+ * Rules:
+ * - Each booking gets ONE unique time slot
+ * - Students with 2 bookings on same day = same airport
+ * - One instructor per time slot (impossible conflicts)
+ * - Simple, clean, predictable demo data
  */
 export function generateBookings(studentIds: string[]): any[] {
   const bookings: any[] = [];
   const now = Timestamp.now();
   
-  // Track instructor availability: Map<timeKey, Set<instructorName>>
-  const instructorBookings = new Map<string, Set<string>>();
+  // Generate 20 fixed time slots
+  const timeSlots = generateFixedTimeSlots();
   
-  // Track student bookings: Map<studentId, Array<{time, airportIndex}>>
-  const studentSchedule = new Map<string, Array<{time: Date, airportIndex: number}>>();
-  
-  // Helper to get available instructor
-  const getAvailableInstructor = (time: Date): string => {
-    const timeKey = time.toISOString();
-    const bookedInstructors = instructorBookings.get(timeKey) || new Set();
-    
-    for (const instructor of INSTRUCTORS) {
-      if (!bookedInstructors.has(instructor)) {
-        return instructor;
-      }
-    }
-    // Fallback (shouldn't happen with 8 instructors)
-    return randomItem(INSTRUCTORS);
-  };
-  
-  // Helper to book an instructor
-  const bookInstructor = (instructor: string, time: Date) => {
-    const timeKey = time.toISOString();
-    if (!instructorBookings.has(timeKey)) {
-      instructorBookings.set(timeKey, new Set());
-    }
-    instructorBookings.get(timeKey)!.add(instructor);
-  };
-  
-  // Helper to get airport for student, considering same-day bookings
-  const getAirportForStudent = (studentId: string, studentIndex: number, time: Date): number => {
-    const schedule = studentSchedule.get(studentId) || [];
-    const sameDay = time.toDateString();
-    
-    // Check if student has any bookings on the same day
-    const sameDayBookings = schedule.filter(b => b.time.toDateString() === sameDay);
-    
-    if (sameDayBookings.length > 0) {
-      // Use the same airport as the other booking(s) that day
-      console.log(`   📍 ${SAMPLE_STUDENTS[studentIndex].name} already has booking on ${sameDay}, using same airport`);
-      return sameDayBookings[0].airportIndex;
-    }
-    
-    // No same-day booking, assign based on training level
-    const trainingLevel = SAMPLE_STUDENTS[studentIndex].trainingLevel;
-    
-    if (trainingLevel === 'student') {
-      // Student pilots: Chicago, Denver, Seattle (more challenging)
-      return randomItem([2, 3, 1]);
-    } else if (trainingLevel === 'private') {
-      // Private pilots: Mix of all
-      return randomItem([0, 1, 2, 3, 4]);
-    } else if (trainingLevel === 'instrument') {
-      // Instrument pilots: Seattle, Houston (IMC capable)
-      return randomItem([1, 4]);
-    } else {
-      // Commercial: San Diego, Denver
-      return randomItem([0, 3]);
-    }
-  };
-  
-  // Generate 20 bookings spread across 15 students (some get 1, some get 2)
-  const bookingCounts = [
-    1, 1, 1, 1, 1,  // Students 0-4: 1 booking each
-    2, 2, 2, 2, 2,  // Students 5-9: 2 bookings each
-    1, 1, 1, 1, 1,  // Students 10-14: 1 booking each
+  // Track which students get how many bookings
+  const studentBookingPlan = [
+    { studentIndex: 0, count: 1 },  // Alex Thompson (student) - 1 booking
+    { studentIndex: 1, count: 1 },  // Sarah Chen (student) - 1 booking
+    { studentIndex: 2, count: 1 },  // Michael Rodriguez (student) - 1 booking
+    { studentIndex: 3, count: 2 },  // Jennifer Wilson (student) - 2 bookings
+    { studentIndex: 4, count: 2 },  // Tom Anderson (student) - 2 bookings
+    { studentIndex: 5, count: 1 },  // Emily Johnson (private) - 1 booking
+    { studentIndex: 6, count: 2 },  // David Kim (private) - 2 bookings
+    { studentIndex: 7, count: 1 },  // Jessica Martinez (private) - 1 booking
+    { studentIndex: 8, count: 2 },  // Chris Taylor (private) - 2 bookings
+    { studentIndex: 9, count: 1 },  // Lauren White (private) - 1 booking
+    { studentIndex: 10, count: 2 }, // Ryan Foster (instrument) - 2 bookings
+    { studentIndex: 11, count: 1 }, // Amanda Liu (instrument) - 1 booking
+    { studentIndex: 12, count: 2 }, // Mark Stevens (instrument) - 2 bookings
+    { studentIndex: 13, count: 1 }, // Brandon Scott (commercial) - 1 booking
+    { studentIndex: 14, count: 1 }, // Rachel Green (commercial) - 1 booking
   ];
   
-  let bookingIndex = 0;
-  for (let studentIndex = 0; studentIndex < SAMPLE_STUDENTS.length && bookingIndex < 20; studentIndex++) {
+  // Track student schedules for same-day airport logic
+  const studentSchedules = new Map<number, Array<{ time: Date, airportIndex: number }>>();
+  
+  let slotIndex = 0;
+  
+  for (const plan of studentBookingPlan) {
+    const studentIndex = plan.studentIndex;
     const studentId = studentIds[studentIndex];
     const studentData = SAMPLE_STUDENTS[studentIndex];
-    const numBookings = bookingCounts[studentIndex] || 1;
     
-    for (let b = 0; b < numBookings && bookingIndex < 20; b++) {
-      // Generate time (distribute across tomorrow and day after)
-      const slot = bookingIndex < 10 ? 'morning' : (bookingIndex < 16 ? 'afternoon' : 'nextmorning');
-      const futureDate = getDateWithin48Hours(slot);
+    if (!studentSchedules.has(studentIndex)) {
+      studentSchedules.set(studentIndex, []);
+    }
+    
+    for (let b = 0; b < plan.count; b++) {
+      if (slotIndex >= timeSlots.length) break; // Safety check
       
-      // Get appropriate airport (respects same-day constraint)
-      const airportIndex = getAirportForStudent(studentId, studentIndex, futureDate);
-      const airport = AIRPORTS[airportIndex];
+      const bookingTime = timeSlots[slotIndex];
+      const schedule = studentSchedules.get(studentIndex)!;
       
-      // Track this booking for the student
-      if (!studentSchedule.has(studentId)) {
-        studentSchedule.set(studentId, []);
+      // Determine airport based on same-day constraint
+      let airportIndex: number;
+      const sameDay = schedule.find(s => s.time.toDateString() === bookingTime.toDateString());
+      
+      if (sameDay) {
+        // Same day = same airport
+        airportIndex = sameDay.airportIndex;
+        console.log(`   📍 ${studentData.name} has 2nd booking same day, using same airport`);
+      } else {
+        // New day, assign based on training level
+        const trainingLevel = studentData.trainingLevel;
+        if (trainingLevel === 'student') {
+          airportIndex = [2, 3, 1][slotIndex % 3]; // Chicago, Denver, Seattle
+        } else if (trainingLevel === 'private') {
+          airportIndex = slotIndex % 5; // All airports
+        } else if (trainingLevel === 'instrument') {
+          airportIndex = [1, 4][slotIndex % 2]; // Seattle, Houston
+        } else {
+          airportIndex = [0, 3][slotIndex % 2]; // San Diego, Denver
+        }
       }
-      studentSchedule.get(studentId)!.push({ time: futureDate, airportIndex });
       
-      // Get available instructor
-      const instructor = getAvailableInstructor(futureDate);
-      bookInstructor(instructor, futureDate);
+      schedule.push({ time: bookingTime, airportIndex });
+      
+      const airport = AIRPORTS[airportIndex];
+      const instructor = INSTRUCTORS[slotIndex % INSTRUCTORS.length]; // Round-robin instructors
+      const aircraft = AIRCRAFT_IDS[slotIndex % AIRCRAFT_IDS.length]; // Round-robin aircraft
       
       bookings.push({
         studentId,
         studentName: studentData.name,
         instructorName: instructor,
-        aircraftId: randomItem(AIRCRAFT_IDS),
-        scheduledTime: Timestamp.fromDate(futureDate),
+        aircraftId: aircraft,
+        scheduledTime: Timestamp.fromDate(bookingTime),
         duration: 60,
         location: {
           name: `${airport.name} (${airport.code})`,
@@ -245,15 +241,17 @@ export function generateBookings(studentIds: string[]): any[] {
         updatedAt: now,
       });
       
-      bookingIndex++;
+      slotIndex++;
     }
   }
-
+  
   // Sort by scheduled time
   bookings.sort((a, b) => a.scheduledTime.toMillis() - b.scheduledTime.toMillis());
-
-  console.log(`   ✅ Generated ${bookings.length} realistic bookings`);
-  console.log(`   ✅ No instructor conflicts, no impossible student travel`);
+  
+  console.log(`   ✅ Generated ${bookings.length} bookings with FIXED time slots`);
+  console.log(`   ✅ Zero conflicts guaranteed - each booking has unique time`);
+  console.log(`   ✅ Students with multiple bookings on same day = same airport`);
+  
   return bookings;
 }
 

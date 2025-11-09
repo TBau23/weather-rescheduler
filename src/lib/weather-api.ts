@@ -117,7 +117,7 @@ export async function fetchWeather(
   const url = new URL(OPENWEATHER_CURRENT_URL);
   url.searchParams.append('lat', lat.toString());
   url.searchParams.append('lon', lon.toString());
-  url.searchParams.append('appid', OPENWEATHER_API_KEY);
+  url.searchParams.append('appid', OPENWEATHER_API_KEY!);
   url.searchParams.append('units', 'metric'); // Celsius
 
   console.log(`[Weather API] Fetching CURRENT weather for ${lat}, ${lon}`);
@@ -166,7 +166,7 @@ async function fetchForecastWeather(
   const url = new URL(OPENWEATHER_FORECAST_URL);
   url.searchParams.append('lat', lat.toString());
   url.searchParams.append('lon', lon.toString());
-  url.searchParams.append('appid', OPENWEATHER_API_KEY);
+  url.searchParams.append('appid', OPENWEATHER_API_KEY!);
   url.searchParams.append('units', 'metric');
 
   const controller = new AbortController();

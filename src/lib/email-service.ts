@@ -66,11 +66,19 @@ export async function sendEmail(
       text: text,
     });
 
-    console.log('Email sent successfully:', result.id);
+    if (result.error) {
+      console.error('Resend API error:', result.error);
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email',
+      };
+    }
+
+    console.log('Email sent successfully:', result.data?.id);
 
     return {
       success: true,
-      messageId: result.id,
+      messageId: result.data?.id || undefined,
     };
   } catch (error: any) {
     console.error('Error sending email:', error);

@@ -5,6 +5,7 @@ import { sendWeatherAlert, sendRescheduleOptions, sendConfirmation } from '@/lib
 import { generateWeatherAlertEmail, generateRescheduleOptionsEmail, generateConfirmationEmail, generateWeatherAlertWithRescheduleEmail } from '@/lib/email-templates';
 import { logNotification } from '@/lib/notification-logger';
 import { Booking, WeatherCheck, RescheduleOption, Student } from '@/types';
+import crypto from 'crypto';
 
 /**
  * POST /api/send-notification
@@ -228,7 +229,10 @@ export async function POST(request: NextRequest) {
           });
         });
 
-        emailTemplate = generateWeatherAlertWithRescheduleEmail(booking, weatherCheck2, rescheduleOptions2);
+        // Generate secure token for reschedule acceptance link
+        const secureToken = crypto.randomBytes(32).toString('hex');
+        
+        emailTemplate = generateWeatherAlertWithRescheduleEmail(booking, weatherCheck2, rescheduleOptions2, secureToken);
         sendResult = await sendWeatherAlert(student.email, student.name, emailTemplate);
         break;
 
