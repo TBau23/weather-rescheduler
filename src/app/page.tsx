@@ -1,8 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBookings } from '@/lib/firebase-hooks';
 import { Booking } from '@/types';
+import { 
+  Calendar, 
+  Search, 
+  AlertTriangle, 
+  RefreshCw, 
+  CheckCircle, 
+  XCircle, 
+  CloudRain, 
+  Loader,
+  Info,
+  CheckCircle2
+} from 'lucide-react';
 
 export default function AdminDashboard() {
   const { bookings, loading, error } = useBookings();
@@ -113,16 +125,17 @@ export default function AdminDashboard() {
   };
 
   const getStatusIcon = (status: string) => {
-    const icons = {
-      scheduled: '📅',
-      checking: '🔍',
-      conflict: '⚠️',
-      rescheduled: '🔄',
-      confirmed: '✅',
-      cancelled: '❌',
+    const iconMap = {
+      scheduled: Calendar,
+      checking: Search,
+      conflict: AlertTriangle,
+      rescheduled: RefreshCw,
+      confirmed: CheckCircle,
+      cancelled: XCircle,
     };
     
-    return icons[status as keyof typeof icons] || '📅';
+    const IconComponent = iconMap[status as keyof typeof iconMap] || Calendar;
+    return <IconComponent className="w-5 h-5" />;
   };
 
   const formatTime = (date: Date) => {
@@ -146,6 +159,28 @@ export default function AdminDashboard() {
     return badges[level as keyof typeof badges] || badges.student;
   };
 
+  // Group bookings by status
+  const groupedBookings = React.useMemo(() => {
+    const groups = {
+      conflict: [] as Booking[],
+      checking: [] as Booking[],
+      rescheduled: [] as Booking[],
+      scheduled: [] as Booking[],
+      confirmed: [] as Booking[],
+      cancelled: [] as Booking[],
+    };
+
+    bookings.forEach(booking => {
+      if (groups[booking.status as keyof typeof groups]) {
+        groups[booking.status as keyof typeof groups].push(booking);
+      } else {
+        groups.scheduled.push(booking);
+      }
+    });
+
+    return groups;
+  }, [bookings]);
+
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -162,15 +197,19 @@ export default function AdminDashboard() {
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-4 right-4 z-50 animate-slide-in">
-          <div className={`rounded-lg shadow-lg p-4 max-w-md border-l-4 ${
+            <div className={`rounded-lg shadow-lg p-4 max-w-md border-l-4 ${
             toast.type === 'success' ? 'bg-green-50 border-green-500 text-green-800' :
             toast.type === 'error' ? 'bg-red-50 border-red-500 text-red-800' :
             'bg-blue-50 border-blue-500 text-blue-800'
           }`}>
-            <div className="flex items-start">
-              <span className="text-2xl mr-3">
-                {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'}
-              </span>
+            <div className="flex items-start gap-3">
+              {toast.type === 'success' ? (
+                <CheckCircle className="w-6 h-6 flex-shrink-0" />
+              ) : toast.type === 'error' ? (
+                <XCircle className="w-6 h-6 flex-shrink-0" />
+              ) : (
+                <Info className="w-6 h-6 flex-shrink-0" />
+              )}
               <p className="font-medium">{toast.message}</p>
             </div>
           </div>
@@ -196,11 +235,14 @@ export default function AdminDashboard() {
             >
               {running ? (
                 <span className="flex items-center gap-2">
-                  <span className="animate-spin">⚙️</span>
+                  <Loader className="w-4 h-4 animate-spin" />
                   Running...
                 </span>
               ) : (
-                '🌤️ Run Weather Check'
+                <span className="flex items-center gap-2">
+                  <CloudRain className="w-4 h-4" />
+                  Run Weather Check
+                </span>
               )}
             </button>
           </div>
@@ -235,7 +277,7 @@ export default function AdminDashboard() {
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                  <div className="animate-spin text-4xl mb-3">⚙️</div>
+                  <Loader className="w-10 h-10 animate-spin text-gray-400 mx-auto mb-3" />
                   <p className="text-gray-600 text-sm">Loading bookings...</p>
                 </div>
               </div>
@@ -245,39 +287,96 @@ export default function AdminDashboard() {
                 <p className="text-gray-400 text-sm mt-1">Run seed data script</p>
               </div>
             ) : (
-              <div className="p-2 space-y-1">
-                {bookings.map((booking) => (
-                  <button
-                    key={booking.id}
-                    id={`booking-${booking.id}`}
-                    onClick={() => setSelectedBookingId(booking.id)}
-                    className={`w-full text-left p-3 rounded-lg transition-all duration-200 ${
-                      selectedBookingId === booking.id
-                        ? 'bg-blue-50 border-2 border-blue-500 shadow-sm scale-[1.02]'
-                        : 'bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm hover:scale-[1.01]'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-lg">{getStatusIcon(booking.status)}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-gray-900 truncate">
-                            {booking.studentName}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(booking.status)}`}>
-                            {booking.status}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-600 mt-1">
-                          {formatTime(booking.scheduledTime)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {booking.instructorName} • {booking.aircraftId}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+              <div className="p-2">
+                {/* Conflicts Group */}
+                {groupedBookings.conflict.length > 0 && (
+                  <BookingGroup
+                    title="CONFLICTS"
+                    icon="⚠️"
+                    count={groupedBookings.conflict.length}
+                    bookings={groupedBookings.conflict}
+                    selectedBookingId={selectedBookingId}
+                    setSelectedBookingId={setSelectedBookingId}
+                    getStatusIcon={getStatusIcon}
+                    getStatusBadge={getStatusBadge}
+                    formatTime={formatTime}
+                  />
+                )}
+
+                {/* Checking Group */}
+                {groupedBookings.checking.length > 0 && (
+                  <BookingGroup
+                    title="CHECKING"
+                    icon="🔍"
+                    count={groupedBookings.checking.length}
+                    bookings={groupedBookings.checking}
+                    selectedBookingId={selectedBookingId}
+                    setSelectedBookingId={setSelectedBookingId}
+                    getStatusIcon={getStatusIcon}
+                    getStatusBadge={getStatusBadge}
+                    formatTime={formatTime}
+                  />
+                )}
+
+                {/* Rescheduled Group */}
+                {groupedBookings.rescheduled.length > 0 && (
+                  <BookingGroup
+                    title="RESCHEDULED"
+                    icon="🔄"
+                    count={groupedBookings.rescheduled.length}
+                    bookings={groupedBookings.rescheduled}
+                    selectedBookingId={selectedBookingId}
+                    setSelectedBookingId={setSelectedBookingId}
+                    getStatusIcon={getStatusIcon}
+                    getStatusBadge={getStatusBadge}
+                    formatTime={formatTime}
+                  />
+                )}
+
+                {/* Scheduled/Safe Group */}
+                {groupedBookings.scheduled.length > 0 && (
+                  <BookingGroup
+                    title="SCHEDULED"
+                    icon="✅"
+                    count={groupedBookings.scheduled.length}
+                    bookings={groupedBookings.scheduled}
+                    selectedBookingId={selectedBookingId}
+                    setSelectedBookingId={setSelectedBookingId}
+                    getStatusIcon={getStatusIcon}
+                    getStatusBadge={getStatusBadge}
+                    formatTime={formatTime}
+                  />
+                )}
+
+                {/* Confirmed Group */}
+                {groupedBookings.confirmed.length > 0 && (
+                  <BookingGroup
+                    title="CONFIRMED"
+                    icon="☑️"
+                    count={groupedBookings.confirmed.length}
+                    bookings={groupedBookings.confirmed}
+                    selectedBookingId={selectedBookingId}
+                    setSelectedBookingId={setSelectedBookingId}
+                    getStatusIcon={getStatusIcon}
+                    getStatusBadge={getStatusBadge}
+                    formatTime={formatTime}
+                  />
+                )}
+
+                {/* Cancelled Group */}
+                {groupedBookings.cancelled.length > 0 && (
+                  <BookingGroup
+                    title="CANCELLED"
+                    icon="❌"
+                    count={groupedBookings.cancelled.length}
+                    bookings={groupedBookings.cancelled}
+                    selectedBookingId={selectedBookingId}
+                    setSelectedBookingId={setSelectedBookingId}
+                    getStatusIcon={getStatusIcon}
+                    getStatusBadge={getStatusBadge}
+                    formatTime={formatTime}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -298,7 +397,7 @@ export default function AdminDashboard() {
           ) : (
             <div className="h-full flex items-center justify-center text-gray-400">
               <div className="text-center">
-                <div className="text-6xl mb-4">📋</div>
+                <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                 <p className="text-lg">Select a booking to view details</p>
               </div>
             </div>
@@ -462,7 +561,7 @@ function BookingDetailPanel({
           {weatherCheck && (
             <div className="bg-red-50 rounded-lg border-2 border-red-200 p-6 mb-4">
               <h3 className="text-lg font-bold text-red-900 mb-3 flex items-center gap-2">
-                <span>⚠️</span>
+                <AlertTriangle className="w-5 h-5" />
                 Weather Conflict Detected
               </h3>
               <div className="space-y-2">
@@ -482,13 +581,13 @@ function BookingDetailPanel({
           {/* Reschedule Options */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span>🤖</span>
+              <RefreshCw className="w-5 h-5" />
               AI-Generated Reschedule Options
             </h3>
 
             {loadingOptions ? (
               <div className="text-center py-8">
-                <div className="animate-spin text-3xl mb-2">⚙️</div>
+                <Loader className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-2" />
                 <p className="text-gray-600 text-sm">Loading options...</p>
               </div>
             ) : rescheduleOptions.length === 0 ? (
@@ -557,7 +656,7 @@ function BookingDetailPanel({
                     >
                       {acceptingId === option.id ? (
                         <span className="flex items-center justify-center gap-2">
-                          <span className="animate-spin">⚙️</span>
+                          <Loader className="w-4 h-4 animate-spin" />
                           Accepting...
                         </span>
                       ) : (
@@ -576,7 +675,7 @@ function BookingDetailPanel({
       {(booking.status === 'scheduled' || booking.status === 'confirmed') && (
         <div className="bg-green-50 rounded-lg border-2 border-green-200 p-6">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">✅</span>
+            <CheckCircle className="w-8 h-8 text-green-600" />
             <div>
               <h3 className="text-lg font-bold text-green-900">Safe to Fly</h3>
               <p className="text-sm text-green-700">No weather conflicts detected for this booking</p>
@@ -589,7 +688,7 @@ function BookingDetailPanel({
       {booking.status === 'rescheduled' && (
         <div className="bg-blue-50 rounded-lg border-2 border-blue-200 p-6">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">🔄</span>
+            <RefreshCw className="w-8 h-8 text-blue-600" />
             <div>
               <h3 className="text-lg font-bold text-blue-900">Reschedule Confirmed</h3>
               <p className="text-sm text-blue-700">This booking has been successfully rescheduled</p>
@@ -610,6 +709,78 @@ function BookingDetailPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Booking Group Component with subheading
+function BookingGroup({
+  title,
+  icon,
+  count,
+  bookings,
+  selectedBookingId,
+  setSelectedBookingId,
+  getStatusIcon,
+  getStatusBadge,
+  formatTime,
+}: {
+  title: string;
+  icon: string;
+  count: number;
+  bookings: Booking[];
+  selectedBookingId: string | null;
+  setSelectedBookingId: (id: string) => void;
+  getStatusIcon: (status: string) => string;
+  getStatusBadge: (status: string) => string;
+  formatTime: (date: Date) => string;
+}) {
+  return (
+    <div className="mb-4">
+      {/* Group Header */}
+      <div className="px-3 py-2 bg-gray-100 border-b border-gray-300 sticky top-0 z-10">
+        <div className="flex items-center gap-2">
+          <span>{icon}</span>
+          <span className="font-semibold text-gray-900 text-sm">{title}</span>
+          <span className="text-gray-600 text-xs">({count})</span>
+        </div>
+      </div>
+
+      {/* Bookings in Group */}
+      <div className="space-y-1 mt-1">
+        {bookings.map((booking) => (
+          <button
+            key={booking.id}
+            id={`booking-${booking.id}`}
+            onClick={() => setSelectedBookingId(booking.id)}
+            className={`w-full text-left p-3 rounded-lg transition-all duration-200 ${
+              selectedBookingId === booking.id
+                ? 'bg-blue-50 border-2 border-blue-500 shadow-sm scale-[1.02]'
+                : 'bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm hover:scale-[1.01]'
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <span className="text-lg">{getStatusIcon(booking.status)}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900 truncate">
+                    {booking.studentName}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(booking.status)}`}>
+                    {booking.status}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">
+                  {formatTime(booking.scheduledTime)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {booking.instructorName} • {booking.aircraftId}
+                </p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

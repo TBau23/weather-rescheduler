@@ -2,9 +2,8 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, Timestamp } from 'firebase/firestore';
 import { Student, Booking, TrainingLevel, BookingStatus } from '@/types';
 
-// Sample airports for realistic locations
+// Sample airports for realistic locations (focused on 3 for demo)
 const AIRPORTS = [
-  { name: 'New York JFK', code: 'KJFK', lat: 40.6413, lon: -73.7781 },
   { name: 'Los Angeles LAX', code: 'KLAX', lat: 33.9416, lon: -118.4085 },
   { name: 'Chicago O\'Hare', code: 'KORD', lat: 41.9742, lon: -87.9073 },
   { name: 'Dallas/Fort Worth', code: 'KDFW', lat: 32.8998, lon: -97.0403 },
@@ -41,18 +40,32 @@ const AIRCRAFT_IDS = [
 ];
 
 /**
- * Generate random date in the next 7 days
+ * Generate date within next 24-48 hours (all bookings meaningful for weather check)
  */
-function getRandomFutureDate(): Date {
+function getDateWithin48Hours(preferredSlot: 'morning' | 'afternoon' | 'nextmorning'): Date {
   const now = new Date();
-  const daysAhead = Math.floor(Math.random() * 7) + 1; // 1-7 days
-  const hoursInDay = Math.floor(Math.random() * 11) + 7; // 7am-6pm
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
   
-  const date = new Date(now);
-  date.setDate(date.getDate() + daysAhead);
-  date.setHours(hoursInDay, 0, 0, 0); // On the hour
-  
-  return date;
+  if (preferredSlot === 'morning') {
+    // Tomorrow morning: 8am-12pm
+    const hour = 8 + Math.floor(Math.random() * 4);
+    tomorrow.setHours(hour, 0, 0, 0);
+    return tomorrow;
+  } else if (preferredSlot === 'afternoon') {
+    // Tomorrow afternoon: 1pm-5pm
+    const hour = 13 + Math.floor(Math.random() * 4);
+    tomorrow.setHours(hour, 0, 0, 0);
+    return tomorrow;
+  } else {
+    // Day after tomorrow morning: 8am-12pm
+    const dayAfter = new Date(tomorrow);
+    dayAfter.setDate(dayAfter.getDate() + 1);
+    const hour = 8 + Math.floor(Math.random() * 4);
+    dayAfter.setHours(hour, 0, 0, 0);
+    return dayAfter;
+  }
 }
 
 /**
@@ -76,23 +89,32 @@ export function generateStudents(): any[] {
 
 /**
  * Generate bookings for seeding
+ * Strategy: 20 bookings total, 1-2 per student, ALL within next 24-48 hours
  */
 export function generateBookings(studentIds: string[]): any[] {
   const bookings: any[] = [];
   const now = Timestamp.now();
   
-  // Create 50 bookings - all scheduled (let weather check create conflicts naturally)
-  const statuses: BookingStatus[] = [
-    ...Array(46).fill('scheduled'),
-    ...Array(4).fill('confirmed'),
+  // Time slot distribution for 20 bookings
+  const timeSlots: ('morning' | 'afternoon' | 'nextmorning')[] = [
+    ...Array(7).fill('morning'),      // Tomorrow morning
+    ...Array(8).fill('afternoon'),    // Tomorrow afternoon
+    ...Array(5).fill('nextmorning'),  // Day after morning
   ];
-
-  for (let i = 0; i < 50; i++) {
-    const studentIndex = Math.floor(Math.random() * studentIds.length);
+  
+  // Shuffle time slots for variety
+  timeSlots.sort(() => Math.random() - 0.5);
+  
+  // Create 20 bookings: 1-2 per student (10 students)
+  // First 10 bookings: one per student
+  // Next 10 bookings: second booking for each student
+  for (let i = 0; i < 20; i++) {
+    const studentIndex = i < 10 ? i : i - 10; // First pass: 0-9, second pass: 0-9 again
     const studentId = studentIds[studentIndex];
     const studentData = SAMPLE_STUDENTS[studentIndex];
-    const airport = randomItem(AIRPORTS);
-    const futureDate = getRandomFutureDate();
+    const airport = AIRPORTS[i % 3]; // Rotate through 3 airports
+    const timeSlot = timeSlots[i];
+    const futureDate = getDateWithin48Hours(timeSlot);
     
     bookings.push({
       studentId,
@@ -106,7 +128,7 @@ export function generateBookings(studentIds: string[]): any[] {
         lat: airport.lat,
         lon: airport.lon,
       },
-      status: statuses[i],
+      status: 'scheduled', // All start as scheduled (no pre-seeded conflicts)
       trainingLevel: studentData.trainingLevel,
       createdAt: now,
       updatedAt: now,

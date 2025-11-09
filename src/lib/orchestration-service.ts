@@ -163,37 +163,48 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
  * @returns Booking result
  */
 async function processBooking(booking: Booking, dryRun: boolean, forceConflict: boolean = false): Promise<BookingResult> {
-  // 1. Check weather
-  console.log(`  🌤️  Checking weather for ${booking.location.name}...`);
-  const weatherCheck = await checkWeatherForBooking(booking);
+  try {
+    // 1. Check weather
+    console.log(`  🌤️  Checking weather for ${booking.location.name}...`);
+    const weatherCheck = await checkWeatherForBooking(booking);
 
-  // 2. If forcing conflicts for testing, override the result
-  if (forceConflict && weatherCheck.isSafe) {
-    console.log(`  🧪 TEST MODE: Forcing this booking to be marked as UNSAFE`);
-    weatherCheck.isSafe = false;
-    weatherCheck.reasons = [
-      'TEST MODE: Simulated unsafe conditions',
-      'Wind speed 25kt exceeds maximum 10kt (forced for testing)',
-      'This is a test conflict to demonstrate the reschedule flow',
-    ];
+    // 2. If forcing conflicts for testing, override the result
+    if (forceConflict && weatherCheck.isSafe) {
+      console.log(`  🧪 TEST MODE: Forcing this booking to be marked as UNSAFE`);
+      weatherCheck.isSafe = false;
+      weatherCheck.reasons = [
+        'TEST MODE: Simulated unsafe conditions',
+        'Wind speed 25kt exceeds maximum 10kt (forced for testing)',
+        'This is a test conflict to demonstrate the reschedule flow',
+      ];
+    }
+
+    // 3. If safe, restore to 'scheduled' status (safe bookings should be 'scheduled', not 'checking')
+    if (weatherCheck.isSafe) {
+      console.log(`  ✅ Weather is safe for ${booking.trainingLevel} pilot`);
+      console.log(`     Restoring booking ${booking.id} from 'checking' to 'scheduled'`);
+      await updateBookingStatus(booking.id, 'scheduled');
+      return { isSafe: true, emailsSent: 0 };
+    }
+
+    // 4. If unsafe, handle the conflict
+    console.log(`  ⚠️  Weather is UNSAFE! Reasons:`);
+    weatherCheck.reasons.forEach((reason) => console.log(`     - ${reason}`));
+
+    await handleUnsafeBooking(booking, weatherCheck, dryRun);
+
+    return { isSafe: false, emailsSent: dryRun ? 0 : 1 };
+  } catch (error: any) {
+    // If anything fails, restore booking to 'scheduled' so it doesn't stay stuck in 'checking'
+    console.error(`  ❌ Error processing booking ${booking.id}, restoring to 'scheduled':`, error.message);
+    try {
+      await updateBookingStatus(booking.id, 'scheduled');
+    } catch (restoreError: any) {
+      console.error(`  ❌ Failed to restore booking ${booking.id} status:`, restoreError.message);
+    }
+    // Re-throw the error so it's caught by Promise.allSettled
+    throw error;
   }
-
-  // 3. If safe, restore original status
-  if (weatherCheck.isSafe) {
-    console.log(`  ✅ Weather is safe for ${booking.trainingLevel} pilot`);
-    // Restore to original status (confirmed if it was confirmed, otherwise scheduled)
-    const restoredStatus: BookingStatus = booking.status === 'checking' ? 'scheduled' : booking.status;
-    await updateBookingStatus(booking.id, restoredStatus);
-    return { isSafe: true, emailsSent: 0 };
-  }
-
-  // 4. If unsafe, handle the conflict
-  console.log(`  ⚠️  Weather is UNSAFE! Reasons:`);
-  weatherCheck.reasons.forEach((reason) => console.log(`     - ${reason}`));
-
-  await handleUnsafeBooking(booking, weatherCheck, dryRun);
-
-  return { isSafe: false, emailsSent: dryRun ? 0 : 1 };
 }
 
 /**

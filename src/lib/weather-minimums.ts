@@ -6,11 +6,11 @@ import { TrainingLevel, WeatherMinimums } from '@/types';
  */
 export const WEATHER_MINIMUMS: Record<TrainingLevel, WeatherMinimums> = {
   student: {
-    visibility: 50, // Normally 5 - set impossibly high
-    ceiling: 10000, // Normally 3000 - set very high
-    windSpeed: 1,   // Normally 10 - set very low
-    windGust: 2,    // Normally 15 - set very low
-    crosswind: 1,   // Normally 5 - set very low
+    visibility: 5, // statute miles
+    ceiling: 3000, // feet AGL
+    windSpeed: 10, // knots
+    windGust: 15, // knots
+    crosswind: 5, // knots
     allowIMC: false,
   },
   private: {
