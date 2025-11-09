@@ -81,6 +81,18 @@ For automated weather checks, generate a secure secret:
    ```
 4. This is used to protect the automated weather check endpoint from unauthorized access
 
+### 6. Application URL (1 minute)
+For reschedule acceptance links in emails:
+1. For local development, add to `.env.local`:
+   ```
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
+   ```
+2. For production deployment on Vercel, add the same variable in Vercel dashboard:
+   - Go to your project settings → Environment Variables
+   - Add `NEXT_PUBLIC_APP_URL` with value `https://your-app.vercel.app`
+   - Replace with your actual Vercel domain
+3. This is used to generate reschedule acceptance links in emails
+
 ## Installation Steps
 
 ### 1. Install Dependencies

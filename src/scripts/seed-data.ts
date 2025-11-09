@@ -81,14 +81,14 @@ export function generateBookings(studentIds: string[]): any[] {
   const bookings: any[] = [];
   const now = Timestamp.now();
   
-  // Create 20 bookings with varied statuses
+  // Create 50 bookings with varied statuses for realistic flight school density
   const statuses: BookingStatus[] = [
-    ...Array(15).fill('scheduled'),
-    ...Array(3).fill('conflict'),
-    ...Array(2).fill('confirmed'),
+    ...Array(38).fill('scheduled'),
+    ...Array(8).fill('conflict'),
+    ...Array(4).fill('confirmed'),
   ];
 
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 50; i++) {
     const studentIndex = Math.floor(Math.random() * studentIds.length);
     const studentId = studentIds[studentIndex];
     const studentData = SAMPLE_STUDENTS[studentIndex];

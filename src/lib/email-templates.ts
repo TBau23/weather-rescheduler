@@ -380,11 +380,16 @@ Options generated using AI-powered scheduling optimization
 export function generateWeatherAlertWithRescheduleEmail(
   booking: Booking,
   weatherCheck: WeatherCheck,
-  options: RescheduleOption[]
+  options: RescheduleOption[],
+  token: string
 ): EmailTemplate {
   const date = formatDate(booking.scheduledTime);
   const time = formatTime(booking.scheduledTime);
   const conditions = weatherCheck.conditions;
+  
+  // Generate reschedule URL
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const rescheduleUrl = `${appUrl}/reschedule/${booking.id}?token=${token}`;
 
   const subject = `Flight Cancelled - Weather Below Minimums (Reschedule Options Included)`;
 
@@ -438,6 +443,15 @@ export function generateWeatherAlertWithRescheduleEmail(
           <strong>Your flight scheduled for ${date} at ${time} has been cancelled due to unsafe weather conditions.</strong>
         </div>
         
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${rescheduleUrl}" class="cta-button" style="background: #2563EB; color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-size: 18px; font-weight: 600; display: inline-block;">
+            📅 View & Accept Reschedule Options
+          </a>
+          <p style="margin-top: 12px; font-size: 14px; color: #6B7280;">
+            Click above to see available times and confirm your new flight
+          </p>
+        </div>
+        
         <h2 style="color: #1F2937; margin-top: 24px;">Flight Details</h2>
         <div class="info-box">
           <p><span class="info-label">Location:</span> ${booking.location.name}</p>
@@ -472,8 +486,8 @@ export function generateWeatherAlertWithRescheduleEmail(
         </div>
         
         <p style="margin-top: 24px;">
-          <strong>To accept an option:</strong> Please contact your instructor ${booking.instructorName} 
-          or reply to this email with your preferred time.
+          <strong>To accept an option:</strong> Click the "View & Accept Options" button above to choose your preferred time online. 
+          You can also contact your instructor ${booking.instructorName} if you have questions.
         </p>
         
         <p style="margin-top: 16px; color: #6B7280; font-size: 14px;">
@@ -518,6 +532,11 @@ Hello ${booking.studentName},
 
 Your flight scheduled for ${date} at ${time} has been cancelled due to unsafe weather conditions.
 
+VIEW & ACCEPT RESCHEDULE OPTIONS ONLINE:
+${rescheduleUrl}
+
+Click the link above to see available times and confirm your new flight.
+
 FLIGHT DETAILS:
 - Location: ${booking.location.name}
 - Aircraft: ${booking.aircraftId}
@@ -539,9 +558,9 @@ RECOMMENDED RESCHEDULE OPTIONS:
 
 ${optionsText}
 
-TO ACCEPT AN OPTION: Please contact your instructor ${booking.instructorName} or reply to this email with your preferred time.
+TO ACCEPT AN OPTION: Visit the link above to choose your preferred time online. You can also contact your instructor ${booking.instructorName} if you have questions.
 
-Note: These options are generated based on current availability and weather forecasts. Please confirm as soon as possible to secure your preferred time.
+Note: These options are generated based on real-time availability and weather forecasts. Please accept as soon as possible to secure your preferred time.
 
 ---
 Weather Rescheduler - Automated Flight Safety System

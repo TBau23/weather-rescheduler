@@ -44,18 +44,18 @@ export async function generateRescheduleOptions(
   console.log(`   Instructor: ${booking.instructorName}`);
   console.log(`   Aircraft: ${booking.aircraftId}`);
   
-  const studentAvailability = getStudentAvailability(
+  const studentAvailability = await getStudentAvailability(
     booking.studentId,
     booking.trainingLevel
   );
   console.log(`   ✓ Student has ${studentAvailability.length} available slots`);
   
-  const instructorAvailability = getInstructorAvailability(
+  const instructorAvailability = await getInstructorAvailability(
     booking.instructorName
   );
   console.log(`   ✓ Instructor has ${instructorAvailability.length} available slots`);
   
-  const aircraftAvailability = getAircraftAvailability(
+  const aircraftAvailability = await getAircraftAvailability(
     booking.aircraftId
   );
   console.log(`   ✓ Aircraft has ${aircraftAvailability.length} available slots`);
@@ -132,16 +132,16 @@ export async function previewRescheduleOptions(
   overlappingSlots: number;
   options: Omit<RescheduleOption, 'id'>[];
 }> {
-  const studentAvailability = getStudentAvailability(
+  const studentAvailability = await getStudentAvailability(
     booking.studentId,
     booking.trainingLevel
   );
   
-  const instructorAvailability = getInstructorAvailability(
+  const instructorAvailability = await getInstructorAvailability(
     booking.instructorName
   );
   
-  const aircraftAvailability = getAircraftAvailability(
+  const aircraftAvailability = await getAircraftAvailability(
     booking.aircraftId
   );
   

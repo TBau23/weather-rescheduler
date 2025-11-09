@@ -2,7 +2,7 @@
 export type TrainingLevel = 'student' | 'private' | 'instrument' | 'commercial';
 
 // Booking Status
-export type BookingStatus = 'scheduled' | 'conflict' | 'rescheduled' | 'confirmed' | 'cancelled';
+export type BookingStatus = 'scheduled' | 'checking' | 'conflict' | 'rescheduled' | 'confirmed' | 'cancelled';
 
 // Student Interface
 export interface Student {

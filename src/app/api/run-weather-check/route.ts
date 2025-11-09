@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
       bookingIds: body.bookingIds,
       hoursAhead: body.hoursAhead || 24,
       dryRun: body.dryRun || false,
+      forceConflict: body.forceConflict || false,
     };
 
     console.log('🎯 Manual weather check workflow triggered');
@@ -57,10 +58,15 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     console.log('🎯 Quick weather check workflow triggered (GET)');
+    
+    // Check for forceConflict query parameter
+    const searchParams = request.nextUrl.searchParams;
+    const forceConflict = searchParams.get('forceConflict') === 'true';
 
     const result = await runWeatherCheckWorkflow({
       hoursAhead: 24,
       dryRun: false,
+      forceConflict,
     });
 
     return NextResponse.json({

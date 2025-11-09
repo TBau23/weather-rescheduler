@@ -16,6 +16,7 @@ export interface WorkflowOptions {
   bookingIds?: string[]; // Filter to specific bookings
   hoursAhead?: number; // Check bookings N hours ahead (default: 24)
   dryRun?: boolean; // Don't actually send emails
+  forceConflict?: boolean; // Force all bookings to be marked as unsafe (for testing)
 }
 
 /**
@@ -59,7 +60,7 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
   };
 
   try {
-    console.log('🚀 Starting weather check workflow...');
+    console.log('Starting weather check workflow...');
     console.log('Options:', options);
 
     // 1. Query upcoming bookings
@@ -81,10 +82,14 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
 
     // 3. Process each booking
     console.log(`Processing ${bookings.length} bookings...`);
+    if (options.forceConflict) {
+      console.log(`🧪 TEST MODE: All bookings will be forced to conflict status`);
+    }
+    
     for (const booking of bookings) {
       try {
         console.log(`\n📋 Processing booking ${booking.id} (${booking.studentName})`);
-        const bookingResult = await processBooking(booking, options.dryRun || false);
+        const bookingResult = await processBooking(booking, options.dryRun || false, options.forceConflict || false);
 
         result.checkedBookings++;
         if (!bookingResult.isSafe) {
@@ -128,18 +133,29 @@ export async function runWeatherCheckWorkflow(options: WorkflowOptions = {}): Pr
  * @param dryRun - If true, don't send emails
  * @returns Booking result
  */
-async function processBooking(booking: Booking, dryRun: boolean): Promise<BookingResult> {
+async function processBooking(booking: Booking, dryRun: boolean, forceConflict: boolean = false): Promise<BookingResult> {
   // 1. Check weather
   console.log(`  🌤️  Checking weather for ${booking.location.name}...`);
   const weatherCheck = await checkWeatherForBooking(booking);
 
-  // 2. If safe, we're done
+  // 2. If forcing conflicts for testing, override the result
+  if (forceConflict && weatherCheck.isSafe) {
+    console.log(`  🧪 TEST MODE: Forcing this booking to be marked as UNSAFE`);
+    weatherCheck.isSafe = false;
+    weatherCheck.reasons = [
+      'TEST MODE: Simulated unsafe conditions',
+      'Wind speed 25kt exceeds maximum 10kt (forced for testing)',
+      'This is a test conflict to demonstrate the reschedule flow',
+    ];
+  }
+
+  // 3. If safe, we're done
   if (weatherCheck.isSafe) {
     console.log(`  ✅ Weather is safe for ${booking.trainingLevel} pilot`);
     return { isSafe: true, emailsSent: 0 };
   }
 
-  // 3. If unsafe, handle the conflict
+  // 4. If unsafe, handle the conflict
   console.log(`  ⚠️  Weather is UNSAFE! Reasons:`);
   weatherCheck.reasons.forEach((reason) => console.log(`     - ${reason}`));
 
@@ -162,21 +178,21 @@ async function handleUnsafeBooking(
   dryRun: boolean
 ): Promise<void> {
   // 1. Update booking status to 'conflict'
-  console.log(`  📝 Updating booking status to 'conflict'...`);
+  console.log(`   Updating booking status to 'conflict'...`);
   await updateBookingStatus(booking.id, 'conflict');
 
   // 2. Generate AI reschedule options
-  console.log(`  🤖 Generating AI reschedule options...`);
-  const rescheduleOptions = await generateRescheduleOptions(booking);
-  console.log(`  ✅ Generated ${rescheduleOptions.length} reschedule options`);
+  console.log(`  Generating AI reschedule options...`);
+  const rescheduleOptions = await generateRescheduleOptions(booking, weatherCheck);
+  console.log(`  Generated ${rescheduleOptions.length} reschedule options`);
 
   // 3. Send combined weather alert + reschedule notification
   if (!dryRun) {
-    console.log(`  📧 Sending weather alert + reschedule notification...`);
+    console.log(`   Sending weather alert + reschedule notification...`);
     await sendWeatherAlertWithReschedule(booking, weatherCheck, rescheduleOptions);
-    console.log(`  ✅ Notification sent successfully`);
+    console.log(`  Notification sent successfully`);
   } else {
-    console.log(`  🔍 DRY RUN: Would send weather alert + reschedule notification`);
+    console.log(`  🔍DRY RUN: Would send weather alert + reschedule notification`);
   }
 }
 

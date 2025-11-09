@@ -1,4 +1,6 @@
-import { TrainingLevel } from '@/types';
+import { TrainingLevel, Booking } from '@/types';
+import { db } from './firebase';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 
 export interface TimeSlot {
   start: Date;
@@ -54,19 +56,107 @@ function generateBaseTimeSlots(): TimeSlot[] {
 }
 
 /**
+ * Fetch existing bookings from Firestore for a specific resource
+ * @param filterField - Field to filter on ('studentId', 'instructorName', or 'aircraftId')
+ * @param filterValue - Value to match
+ * @returns Array of bookings
+ */
+async function fetchExistingBookings(
+  filterField: 'studentId' | 'instructorName' | 'aircraftId',
+  filterValue: string
+): Promise<Booking[]> {
+  const now = new Date();
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  
+  // Query bookings in next 7 days for this resource
+  const q = query(
+    collection(db, 'bookings'),
+    where(filterField, '==', filterValue),
+    where('scheduledTime', '>=', Timestamp.fromDate(now)),
+    where('scheduledTime', '<=', Timestamp.fromDate(sevenDaysFromNow))
+  );
+  
+  const snapshot = await getDocs(q);
+  
+  const bookings: Booking[] = snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      studentId: data.studentId,
+      studentName: data.studentName,
+      instructorName: data.instructorName,
+      aircraftId: data.aircraftId,
+      scheduledTime: data.scheduledTime.toDate(),
+      duration: data.duration,
+      location: data.location,
+      status: data.status,
+      trainingLevel: data.trainingLevel,
+      createdAt: data.createdAt.toDate(),
+      updatedAt: data.updatedAt.toDate(),
+    };
+  });
+  
+  // Filter out cancelled bookings (they don't block availability)
+  return bookings.filter(b => b.status !== 'cancelled');
+}
+
+/**
+ * Convert bookings to blocked time slots (with buffer time)
+ * @param bookings - Array of existing bookings
+ * @returns Array of time slots that are blocked
+ */
+function bookingsToBlockedSlots(bookings: Booking[]): TimeSlot[] {
+  const blockedSlots: TimeSlot[] = [];
+  
+  for (const booking of bookings) {
+    const start = new Date(booking.scheduledTime);
+    const end = new Date(start.getTime() + booking.duration * 60 * 1000);
+    
+    // Add 30-minute buffer after each flight for turnaround/maintenance
+    const bufferEnd = new Date(end.getTime() + 30 * 60 * 1000);
+    
+    blockedSlots.push({ start, end: bufferEnd });
+  }
+  
+  return blockedSlots;
+}
+
+/**
+ * Check if two time slots overlap
+ */
+function slotsOverlap(slot1: TimeSlot, slot2: TimeSlot): boolean {
+  return slot1.start < slot2.end && slot2.start < slot1.end;
+}
+
+/**
+ * Filter available slots by removing blocked times
+ * @param availableSlots - Candidate time slots
+ * @param blockedSlots - Time slots that are already booked
+ * @returns Filtered available slots
+ */
+function filterBlockedSlots(availableSlots: TimeSlot[], blockedSlots: TimeSlot[]): TimeSlot[] {
+  return availableSlots.filter(available => {
+    // Check if this available slot overlaps with any blocked slot
+    return !blockedSlots.some(blocked => slotsOverlap(available, blocked));
+  });
+}
+
+/**
  * Get student availability based on training level
  * 
  * Student pilots: Prefer afternoons/evenings (after 2pm)
  * Private pilots: More flexible, weekday afternoons + weekends
  * Instrument pilots: Can include early mornings and evenings
  * Commercial pilots: Most flexible schedule
+ * 
+ * Now queries real bookings from Firestore to exclude already-booked times
  */
-export function getStudentAvailability(
+export async function getStudentAvailability(
   studentId: string,
   trainingLevel: TrainingLevel
-): TimeSlot[] {
+): Promise<TimeSlot[]> {
   const baseSlots = generateBaseTimeSlots();
-  const availableSlots: TimeSlot[] = [];
+  const candidateSlots: TimeSlot[] = [];
   
   baseSlots.forEach((slot, index) => {
     const hour = slot.start.getHours();
@@ -85,7 +175,7 @@ export function getStudentAvailability(
         // Student pilots prefer afternoons (after 2pm) - more stable weather
         // Avoid early mornings (fog risk)
         if (hour >= 14 || (isWeekend && hour >= 10)) {
-          availableSlots.push(slot);
+          candidateSlots.push(slot);
         }
         break;
         
@@ -93,7 +183,7 @@ export function getStudentAvailability(
         // Private pilots more flexible
         // Weekday afternoons + weekends
         if ((hour >= 12 && !isWeekend) || isWeekend) {
-          availableSlots.push(slot);
+          candidateSlots.push(slot);
         }
         break;
         
@@ -101,32 +191,39 @@ export function getStudentAvailability(
         // Instrument pilots can fly early morning and evening
         // More flexible schedule
         if (hour >= 7 || isWeekend) {
-          availableSlots.push(slot);
+          candidateSlots.push(slot);
         }
         break;
         
       case 'commercial':
         // Commercial pilots most flexible - any time
-        availableSlots.push(slot);
+        candidateSlots.push(slot);
         break;
     }
   });
   
-  return availableSlots;
+  // Fetch existing bookings for this student
+  const existingBookings = await fetchExistingBookings('studentId', studentId);
+  const blockedSlots = bookingsToBlockedSlots(existingBookings);
+  
+  // Filter out times when student already has bookings
+  return filterBlockedSlots(candidateSlots, blockedSlots);
 }
 
 /**
  * Get instructor availability based on their specific schedule
  * Each instructor has different availability patterns to simulate reality
+ * 
+ * Now queries real bookings from Firestore to exclude already-booked times
  */
-export function getInstructorAvailability(instructorName: string): TimeSlot[] {
+export async function getInstructorAvailability(instructorName: string): Promise<TimeSlot[]> {
   if (!INSTRUCTORS.includes(instructorName)) {
     // Unknown instructor, return empty
     return [];
   }
   
   const baseSlots = generateBaseTimeSlots();
-  const availableSlots: TimeSlot[] = [];
+  const candidateSlots: TimeSlot[] = [];
   
   baseSlots.forEach((slot, index) => {
     const hour = slot.start.getHours();
@@ -166,25 +263,30 @@ export function getInstructorAvailability(instructorName: string): TimeSlot[] {
     }
     
     if (isAvailable) {
-      availableSlots.push(slot);
+      candidateSlots.push(slot);
     }
   });
   
-  return availableSlots;
+  // Fetch existing bookings for this instructor
+  const existingBookings = await fetchExistingBookings('instructorName', instructorName);
+  const blockedSlots = bookingsToBlockedSlots(existingBookings);
+  
+  // Filter out times when instructor already has bookings
+  return filterBlockedSlots(candidateSlots, blockedSlots);
 }
 
 /**
  * Get aircraft availability based on existing bookings
- * Simulates realistic aircraft scheduling with some times already booked
+ * Queries real Firestore bookings and applies maintenance windows
  */
-export function getAircraftAvailability(aircraftId: string): TimeSlot[] {
+export async function getAircraftAvailability(aircraftId: string): Promise<TimeSlot[]> {
   if (!AIRCRAFT_IDS.includes(aircraftId)) {
     // Unknown aircraft, return empty
     return [];
   }
   
   const baseSlots = generateBaseTimeSlots();
-  const availableSlots: TimeSlot[] = [];
+  const candidateSlots: TimeSlot[] = [];
   
   baseSlots.forEach((slot, index) => {
     const hour = slot.start.getHours();
@@ -202,11 +304,16 @@ export function getAircraftAvailability(aircraftId: string): TimeSlot[] {
     const isMaintenanceDay2 = dayOfWeek === 3 && aircraftId === 'N67890'; // Wednesday for N67890
     
     if (isAvailable && !isMaintenanceDay && !isMaintenanceDay2) {
-      availableSlots.push(slot);
+      candidateSlots.push(slot);
     }
   });
   
-  return availableSlots;
+  // Fetch existing bookings for this aircraft
+  const existingBookings = await fetchExistingBookings('aircraftId', aircraftId);
+  const blockedSlots = bookingsToBlockedSlots(existingBookings);
+  
+  // Filter out times when aircraft already has bookings
+  return filterBlockedSlots(candidateSlots, blockedSlots);
 }
 
 /**
@@ -241,14 +348,6 @@ export function findOverlappingAvailability(
   });
   
   return overlapping;
-}
-
-/**
- * Check if two time slots overlap
- */
-function slotsOverlap(slot1: TimeSlot, slot2: TimeSlot): boolean {
-  // Slots overlap if one starts before the other ends
-  return slot1.start < slot2.end && slot2.start < slot1.end;
 }
 
 /**

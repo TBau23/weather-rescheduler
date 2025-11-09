@@ -3,7 +3,8 @@ import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp, g
 import { Booking, WeatherCheck, RescheduleOption, BookingStatus } from '@/types';
 import { fetchWeather } from './weather-api';
 import { evaluateSafety } from './weather-evaluation';
-import { generateRescheduleOptionsForBooking } from './reschedule-generator';
+import { generateRescheduleOptions as generateRescheduleOptionsForBooking } from './reschedule-generator';
+import { randomBytes } from 'crypto';
 
 /**
  * Query upcoming bookings from Firestore
@@ -119,20 +120,58 @@ export async function updateBookingStatus(
 }
 
 /**
- * Generate reschedule options for a booking
+ * Generate reschedule options for a booking and save to Firestore
  * Directly calls reschedule generator instead of HTTP API
  * @param booking - The booking to generate options for
- * @returns Array of reschedule options
+ * @param weatherCheck - The weather check that deemed it unsafe
+ * @returns Array of reschedule options with IDs and token
  */
-export async function generateRescheduleOptions(booking: Booking): Promise<RescheduleOption[]> {
+export async function generateRescheduleOptions(
+  booking: Booking,
+  weatherCheck: WeatherCheck
+): Promise<Array<RescheduleOption & { token: string }>> {
   console.log(`    Generating reschedule options with AI...`);
   
+  // Generate secure token for this booking's reschedule options
+  const token = randomBytes(32).toString('hex');
+  
   // Generate options using AI
-  const options = await generateRescheduleOptionsForBooking(booking);
+  const optionsWithoutIds = await generateRescheduleOptionsForBooking(booking, weatherCheck);
   
-  console.log(`    Generated ${options.length} reschedule options`);
+  console.log(`    Generated ${optionsWithoutIds.length} reschedule options`);
+  console.log(`    Saving options to Firestore with token...`);
   
-  return options;
+  // Save options to Firestore with token
+  const savedOptions: Array<RescheduleOption & { token: string }> = [];
+  
+  for (const option of optionsWithoutIds) {
+    const optionData = {
+      bookingId: option.bookingId,
+      suggestedTime: Timestamp.fromDate(option.suggestedTime),
+      reasoning: option.reasoning,
+      priority: option.priority,
+      studentAvailable: option.studentAvailable,
+      instructorAvailable: option.instructorAvailable,
+      aircraftAvailable: option.aircraftAvailable,
+      weatherForecast: option.weatherForecast,
+      createdAt: Timestamp.fromDate(option.createdAt),
+      token, // Include token for validation
+    };
+    
+    const docRef = await addDoc(collection(db, 'rescheduleOptions'), optionData);
+    
+    savedOptions.push({
+      id: docRef.id,
+      ...option,
+      token,
+    });
+    
+    console.log(`       ✓ Saved option ${option.priority} (${docRef.id})`);
+  }
+  
+  console.log(`    ✓ All ${savedOptions.length} options saved to Firestore`);
+  
+  return savedOptions;
 }
 
 /**
@@ -140,12 +179,12 @@ export async function generateRescheduleOptions(booking: Booking): Promise<Resch
  * Directly handles email generation and sending
  * @param booking - The booking to send notification for
  * @param weatherCheck - The weather check result
- * @param rescheduleOptions - The reschedule options
+ * @param rescheduleOptions - The reschedule options with IDs and token
  */
 export async function sendWeatherAlertWithReschedule(
   booking: Booking,
   weatherCheck: WeatherCheck,
-  rescheduleOptions: RescheduleOption[]
+  rescheduleOptions: Array<RescheduleOption & { token: string }>
 ): Promise<void> {
   console.log(`    Sending combined notification email...`);
   
@@ -173,11 +212,15 @@ export async function sendWeatherAlertWithReschedule(
     updatedAt: studentData.updatedAt.toDate(),
   };
   
-  // Generate email template
+  // Extract token (all options have the same token)
+  const token = rescheduleOptions[0]?.token || '';
+  
+  // Generate email template with reschedule link
   const emailTemplate = generateWeatherAlertWithRescheduleEmail(
     booking,
     weatherCheck,
-    rescheduleOptions
+    rescheduleOptions,
+    token
   );
   
   // Send email
