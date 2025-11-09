@@ -109,3 +109,17 @@ export interface WeatherMinimums {
   allowIMC: boolean; // Instrument Meteorological Conditions
 }
 
+// Availability Slot for scheduling
+export interface AvailabilitySlot {
+  startTime: Date;
+  duration: number; // minutes
+  isBooked?: boolean;
+  reason?: string; // 'maintenance', 'booked', etc.
+}
+
+// AI Prompt Message
+export interface PromptMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
