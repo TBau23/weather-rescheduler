@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, doc, getDoc, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { sendWeatherAlert, sendRescheduleOptions, sendConfirmation } from '@/lib/email-service';
-import { generateWeatherAlertEmail, generateRescheduleOptionsEmail, generateConfirmationEmail } from '@/lib/email-templates';
+import { generateWeatherAlertEmail, generateRescheduleOptionsEmail, generateConfirmationEmail, generateWeatherAlertWithRescheduleEmail } from '@/lib/email-templates';
 import { logNotification } from '@/lib/notification-logger';
 import { Booking, WeatherCheck, RescheduleOption, Student } from '@/types';
 
@@ -28,9 +28,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['weather_alert', 'reschedule_options', 'confirmation'].includes(type)) {
+    if (!['weather_alert', 'reschedule_options', 'confirmation', 'weather_alert_with_reschedule'].includes(type)) {
       return NextResponse.json(
-        { error: 'Invalid notification type. Must be: weather_alert, reschedule_options, or confirmation' },
+        { error: 'Invalid notification type. Must be: weather_alert, reschedule_options, confirmation, or weather_alert_with_reschedule' },
         { status: 400 }
       );
     }
@@ -162,6 +162,74 @@ export async function POST(request: NextRequest) {
 
         emailTemplate = generateRescheduleOptionsEmail(booking, rescheduleOptions);
         sendResult = await sendRescheduleOptions(student.email, student.name, emailTemplate);
+        break;
+
+      case 'weather_alert_with_reschedule':
+        // Fetch latest weather check
+        const weatherChecksQuery2 = query(
+          collection(db, 'weatherChecks'),
+          where('bookingId', '==', bookingId),
+          orderBy('checkTime', 'desc'),
+          limit(1)
+        );
+        const weatherChecksSnap2 = await getDocs(weatherChecksQuery2);
+
+        if (weatherChecksSnap2.empty) {
+          return NextResponse.json(
+            { error: 'No weather check found for this booking' },
+            { status: 404 }
+          );
+        }
+
+        const weatherCheckData2 = weatherChecksSnap2.docs[0].data();
+        const weatherCheck2: WeatherCheck = {
+          id: weatherChecksSnap2.docs[0].id,
+          bookingId: weatherCheckData2.bookingId,
+          checkTime: weatherCheckData2.checkTime.toDate(),
+          conditions: {
+            ...weatherCheckData2.conditions,
+            timestamp: weatherCheckData2.conditions.timestamp.toDate(),
+          },
+          isSafe: weatherCheckData2.isSafe,
+          trainingLevel: weatherCheckData2.trainingLevel,
+          reasons: weatherCheckData2.reasons,
+        };
+
+        // Fetch reschedule options
+        const rescheduleQuery2 = query(
+          collection(db, 'rescheduleOptions'),
+          where('bookingId', '==', bookingId),
+          orderBy('priority', 'asc'),
+          limit(3)
+        );
+        const rescheduleSnap2 = await getDocs(rescheduleQuery2);
+
+        if (rescheduleSnap2.empty) {
+          return NextResponse.json(
+            { error: 'No reschedule options found for this booking' },
+            { status: 404 }
+          );
+        }
+
+        const rescheduleOptions2: RescheduleOption[] = [];
+        rescheduleSnap2.forEach((doc) => {
+          const data = doc.data();
+          rescheduleOptions2.push({
+            id: doc.id,
+            bookingId: data.bookingId,
+            suggestedTime: data.suggestedTime.toDate(),
+            reasoning: data.reasoning,
+            priority: data.priority,
+            studentAvailable: data.studentAvailable,
+            instructorAvailable: data.instructorAvailable,
+            aircraftAvailable: data.aircraftAvailable,
+            weatherForecast: data.weatherForecast,
+            createdAt: data.createdAt.toDate(),
+          });
+        });
+
+        emailTemplate = generateWeatherAlertWithRescheduleEmail(booking, weatherCheck2, rescheduleOptions2);
+        sendResult = await sendWeatherAlert(student.email, student.name, emailTemplate);
         break;
 
       case 'confirmation':

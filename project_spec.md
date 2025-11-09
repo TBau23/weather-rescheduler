@@ -22,6 +22,9 @@ Build a working event-driven system that monitors weather conditions for schedul
 - AI making training-level-aware decisions
 - Live notification sending
 - State transitions in the database
+- **Visual wow factors:**
+  - Animated real-time dashboard with live state transitions
+  - Interactive weather map showing conflicts visually
 
 ---
 
@@ -42,6 +45,12 @@ Build a working event-driven system that monitors weather conditions for schedul
 ### Development
 - **AI Assistance**: Cursor/Windsurf for generation
 - **Version Control**: Git + GitHub
+
+### Visual Enhancements (Epic 5)
+- **Animations**: Framer Motion / CSS transitions
+- **Maps**: Mapbox GL JS or React Leaflet
+- **UI Components**: Tailwind CSS + Headless UI
+- **Icons**: Lucide React or Heroicons
 
 ---
 
@@ -132,6 +141,16 @@ Build a working event-driven system that monitors weather conditions for schedul
 - [ ] Weather alert cards
 - [ ] Booking detail modal with reschedule options
 - [ ] Manual trigger button (for demo)
+- [ ] **VISUAL ENHANCEMENT**: Real-time animated state transitions
+  - Live progress indicators during weather checks
+  - Animated status changes (Scheduled → Checking → Conflict → Rescheduled)
+  - Toast notifications as emails send
+  - Smooth transitions and loading states
+- [ ] **VISUAL ENHANCEMENT**: Interactive weather map
+  - Embedded map (Mapbox/Leaflet) showing booking locations
+  - Color-coded pins: Green (safe), Red (conflict), Yellow (checking)
+  - Click pin to see weather details + booking info
+  - Visual flight school location overview
 
 ### Epic 6: Orchestration & Automation (Day 4)
 **Depends on: Epic 2, 3, 4**
@@ -162,6 +181,7 @@ Build a working event-driven system that monitors weather conditions for schedul
 **Day 3-4:**
 - Epic 5 (Dashboard) - can work independently with mock data initially
 - Integrate Epics 2, 3, 4 as they complete
+- Add visual enhancements (animations + map) - 4-5 hours extra
 
 **Day 4:**
 - Epic 6 (Orchestration) - ties everything together
@@ -215,10 +235,16 @@ Build a working event-driven system that monitors weather conditions for schedul
 5. ✅ Dashboard shows live updates when booking status changes
 6. ✅ Manual trigger button works for repeatable demo
 
-**Nice to Have:**
+**Visual Polish (High Priority for Demo Impact):**
+- ✨ Real-time animated dashboard (Epic 5 enhancement)
+- 🗺️ Interactive weather map with color-coded pins (Epic 5 enhancement)
+
+**Nice to Have (Lower Priority):**
 - SMS notifications (skip for v1)
 - Google Calendar integration (skip for v1)
 - Historical analytics (skip for v1)
+- Email preview panel in dashboard
+- Multi-location weather tracking (departure + arrival)
 
 ---
 

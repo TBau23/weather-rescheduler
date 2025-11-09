@@ -80,7 +80,7 @@ export interface Notification {
   id: string;
   bookingId: string;
   studentId: string;
-  type: 'weather_alert' | 'reschedule_options' | 'confirmation';
+  type: 'weather_alert' | 'reschedule_options' | 'confirmation' | 'weather_alert_with_reschedule';
   recipientEmail: string;
   subject: string;
   htmlContent: string;
