@@ -14,6 +14,9 @@ const INSTRUCTORS = [
   'CFI Johnson',
   'CFII Williams',
   'Captain Brown',
+  'CFI Anderson',
+  'CFII Martinez',
+  'Captain Thompson',
 ];
 
 // Seeded aircraft from seed-data.ts
@@ -23,6 +26,9 @@ const AIRCRAFT_IDS = [
   'N24680',
   'N13579',
   'N98765',
+  'N11111',
+  'N22222',
+  'N33333',
 ];
 
 /**
@@ -59,11 +65,13 @@ function generateBaseTimeSlots(): TimeSlot[] {
  * Fetch existing bookings from Firestore for a specific resource
  * @param filterField - Field to filter on ('studentId', 'instructorName', or 'aircraftId')
  * @param filterValue - Value to match
+ * @param excludeBookingId - Optional booking ID to exclude (e.g., when rescheduling)
  * @returns Array of bookings
  */
 async function fetchExistingBookings(
   filterField: 'studentId' | 'instructorName' | 'aircraftId',
-  filterValue: string
+  filterValue: string,
+  excludeBookingId?: string
 ): Promise<Booking[]> {
   const now = new Date();
   const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -96,8 +104,11 @@ async function fetchExistingBookings(
     };
   });
   
-  // Filter out cancelled bookings (they don't block availability)
-  return bookings.filter(b => b.status !== 'cancelled');
+  // Filter out cancelled bookings and optionally exclude a specific booking
+  return bookings.filter(b => 
+    b.status !== 'cancelled' && 
+    (!excludeBookingId || b.id !== excludeBookingId)
+  );
 }
 
 /**
@@ -150,10 +161,13 @@ function filterBlockedSlots(availableSlots: TimeSlot[], blockedSlots: TimeSlot[]
  * Commercial pilots: Most flexible schedule
  * 
  * Now queries real bookings from Firestore to exclude already-booked times
+ * 
+ * @param excludeBookingId - Optional booking ID to exclude (useful when rescheduling)
  */
 export async function getStudentAvailability(
   studentId: string,
-  trainingLevel: TrainingLevel
+  trainingLevel: TrainingLevel,
+  excludeBookingId?: string
 ): Promise<TimeSlot[]> {
   const baseSlots = generateBaseTimeSlots();
   const candidateSlots: TimeSlot[] = [];
@@ -202,8 +216,8 @@ export async function getStudentAvailability(
     }
   });
   
-  // Fetch existing bookings for this student
-  const existingBookings = await fetchExistingBookings('studentId', studentId);
+  // Fetch existing bookings for this student (excluding the current booking if rescheduling)
+  const existingBookings = await fetchExistingBookings('studentId', studentId, excludeBookingId);
   const blockedSlots = bookingsToBlockedSlots(existingBookings);
   
   // Filter out times when student already has bookings
@@ -215,8 +229,13 @@ export async function getStudentAvailability(
  * Each instructor has different availability patterns to simulate reality
  * 
  * Now queries real bookings from Firestore to exclude already-booked times
+ * 
+ * @param excludeBookingId - Optional booking ID to exclude (useful when rescheduling)
  */
-export async function getInstructorAvailability(instructorName: string): Promise<TimeSlot[]> {
+export async function getInstructorAvailability(
+  instructorName: string,
+  excludeBookingId?: string
+): Promise<TimeSlot[]> {
   if (!INSTRUCTORS.includes(instructorName)) {
     // Unknown instructor, return empty
     return [];
@@ -260,6 +279,21 @@ export async function getInstructorAvailability(instructorName: string): Promise
         // Weekend specialist + some weekday afternoons
         isAvailable = (isWeekend || (hour >= 14 && !isWeekend)) && index % 3 !== 0;
         break;
+        
+      case 'CFI Anderson':
+        // Full-time instructor - weekdays all day
+        isAvailable = !isWeekend && hour >= 8 && hour <= 17 && index % 2 !== 0;
+        break;
+        
+      case 'CFII Martinez':
+        // Instrument instructor - flexible schedule including weekends
+        isAvailable = hour >= 8 && hour <= 17 && index % 3 !== 0;
+        break;
+        
+      case 'Captain Thompson':
+        // Experienced instructor - weekdays and Saturday mornings
+        isAvailable = (!isWeekend && hour >= 7 && hour <= 16) || (dayOfWeek === 6 && hour >= 8 && hour <= 12);
+        break;
     }
     
     if (isAvailable) {
@@ -267,8 +301,8 @@ export async function getInstructorAvailability(instructorName: string): Promise
     }
   });
   
-  // Fetch existing bookings for this instructor
-  const existingBookings = await fetchExistingBookings('instructorName', instructorName);
+  // Fetch existing bookings for this instructor (excluding the current booking if rescheduling)
+  const existingBookings = await fetchExistingBookings('instructorName', instructorName, excludeBookingId);
   const blockedSlots = bookingsToBlockedSlots(existingBookings);
   
   // Filter out times when instructor already has bookings
@@ -278,8 +312,13 @@ export async function getInstructorAvailability(instructorName: string): Promise
 /**
  * Get aircraft availability based on existing bookings
  * Queries real Firestore bookings and applies maintenance windows
+ * 
+ * @param excludeBookingId - Optional booking ID to exclude (useful when rescheduling)
  */
-export async function getAircraftAvailability(aircraftId: string): Promise<TimeSlot[]> {
+export async function getAircraftAvailability(
+  aircraftId: string,
+  excludeBookingId?: string
+): Promise<TimeSlot[]> {
   if (!AIRCRAFT_IDS.includes(aircraftId)) {
     // Unknown aircraft, return empty
     return [];
@@ -308,8 +347,8 @@ export async function getAircraftAvailability(aircraftId: string): Promise<TimeS
     }
   });
   
-  // Fetch existing bookings for this aircraft
-  const existingBookings = await fetchExistingBookings('aircraftId', aircraftId);
+  // Fetch existing bookings for this aircraft (excluding the current booking if rescheduling)
+  const existingBookings = await fetchExistingBookings('aircraftId', aircraftId, excludeBookingId);
   const blockedSlots = bookingsToBlockedSlots(existingBookings);
   
   // Filter out times when aircraft already has bookings

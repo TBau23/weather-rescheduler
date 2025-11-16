@@ -22,7 +22,7 @@ export default function AdminDashboard() {
   const [lastResult, setLastResult] = useState<any>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [demoMode, setDemoMode] = useState(false); // Toggle for forcing conflicts
+  const [seeding, setSeeding] = useState(false);
 
   const selectedBooking = selectedBookingId 
     ? bookings.find(b => b.id === selectedBookingId) 
@@ -89,7 +89,7 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          forceConflict: demoMode, // Only force conflicts in demo mode
+          forceConflict: false,
           hoursAhead: 48, // Check 48 hours ahead (within forecast range)
         }),
       });
@@ -98,9 +98,7 @@ export default function AdminDashboard() {
       
       if (data.success) {
         setLastResult(data.result);
-        const message = demoMode 
-          ? `Demo mode: ${data.result.unsafeBookings} conflicts forced, ${data.result.emailsSent} emails sent.`
-          : `Weather check complete! ${data.result.checkedBookings} checked, ${data.result.unsafeBookings} conflicts, ${data.result.emailsSent} emails sent.`;
+        const message = `Weather check complete! ${data.result.checkedBookings} checked, ${data.result.unsafeBookings} conflicts, ${data.result.emailsSent} emails sent.`;
         showToast(message, 'success');
       } else {
         showToast(`Error: ${data.error}`, 'error');
@@ -109,6 +107,35 @@ export default function AdminDashboard() {
       showToast(`Failed to run weather check: ${err.message}`, 'error');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const resetAndSeedData = async () => {
+    if (!confirm('This will delete all existing data and create fresh bookings. Continue?')) {
+      return;
+    }
+
+    setSeeding(true);
+    showToast('Clearing data and seeding fresh bookings...', 'info');
+    
+    try {
+      const response = await fetch('/api/seed-data?clear=true', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        showToast(`Success! Created ${data.data.bookingsCreated} fresh bookings.`, 'success');
+        // Refresh the page to show new data
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        showToast(`Error: ${data.error}`, 'error');
+      }
+    } catch (err: any) {
+      showToast(`Failed to reset data: ${err.message}`, 'error');
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -226,17 +253,27 @@ export default function AdminDashboard() {
               <p className="text-gray-600 text-sm mt-1">Flight scheduling with AI-powered weather monitoring</p>
             </div>
             <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={demoMode}
-                  onChange={(e) => setDemoMode(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700 group-hover:text-gray-900">
-                  Demo Mode (Force Conflicts)
-                </span>
-              </label>
+              <button
+                onClick={resetAndSeedData}
+                disabled={seeding || loading}
+                className={`px-5 py-2.5 rounded-lg font-semibold text-white transition-all ${
+                  seeding || loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700 hover:shadow-lg active:scale-95'
+                }`}
+              >
+                {seeding ? (
+                  <span className="flex items-center gap-2">
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Resetting...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4" />
+                    Reset & Seed Data
+                  </span>
+                )}
+              </button>
               <button
                 onClick={runWeatherCheck}
                 disabled={running || loading}

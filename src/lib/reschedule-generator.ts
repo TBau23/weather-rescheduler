@@ -46,17 +46,20 @@ export async function generateRescheduleOptions(
   
   const studentAvailability = await getStudentAvailability(
     booking.studentId,
-    booking.trainingLevel
+    booking.trainingLevel,
+    booking.id  // Exclude current booking when finding reschedule slots
   );
   console.log(`   ✓ Student has ${studentAvailability.length} available slots`);
   
   const instructorAvailability = await getInstructorAvailability(
-    booking.instructorName
+    booking.instructorName,
+    booking.id  // Exclude current booking when finding reschedule slots
   );
   console.log(`   ✓ Instructor has ${instructorAvailability.length} available slots`);
   
   const aircraftAvailability = await getAircraftAvailability(
-    booking.aircraftId
+    booking.aircraftId,
+    booking.id  // Exclude current booking when finding reschedule slots
   );
   console.log(`   ✓ Aircraft has ${aircraftAvailability.length} available slots`);
   

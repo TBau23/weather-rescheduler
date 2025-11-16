@@ -6,8 +6,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Configuration
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
-const DEMO_MODE = process.env.NODE_ENV === 'development';
 const DEMO_EMAIL = process.env.DEMO_EMAIL;
+// Enable demo mode if DEMO_EMAIL is set (regardless of environment)
+const DEMO_MODE = !!DEMO_EMAIL;
 
 /**
  * Send an email via Resend with demo mode support
