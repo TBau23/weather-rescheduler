@@ -80,12 +80,17 @@ const AIRCRAFT_IDS = [
  */
 function generateFixedTimeSlots(): Date[] {
   const now = new Date();
+  
+  // Use UTC to ensure consistent times across timezones (Vercel runs on UTC)
+  // This creates times in PST/PDT (UTC-8/-7) for a California-based flight school
+  const TIMEZONE_OFFSET_HOURS = -8; // PST (use -7 for PDT in summer)
+  
   const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(0 - TIMEZONE_OFFSET_HOURS, 0, 0, 0); // Start of day in PST
   
   const dayAfter = new Date(tomorrow);
-  dayAfter.setDate(dayAfter.getDate() + 1);
+  dayAfter.setUTCDate(dayAfter.getUTCDate() + 1);
   
   const slots: Date[] = [];
   
@@ -93,7 +98,7 @@ function generateFixedTimeSlots(): Date[] {
   const day1Hours = [8, 10, 12, 14, 16];
   day1Hours.forEach(hour => {
     const slot = new Date(tomorrow);
-    slot.setHours(hour, 0, 0, 0);
+    slot.setUTCHours(hour - TIMEZONE_OFFSET_HOURS, 0, 0, 0);
     slots.push(slot);
   });
   
@@ -101,7 +106,7 @@ function generateFixedTimeSlots(): Date[] {
   const day2Hours = [8, 10, 12, 14, 16];
   day2Hours.forEach(hour => {
     const slot = new Date(dayAfter);
-    slot.setHours(hour, 0, 0, 0);
+    slot.setUTCHours(hour - TIMEZONE_OFFSET_HOURS, 0, 0, 0);
     slots.push(slot);
   });
   
@@ -109,11 +114,11 @@ function generateFixedTimeSlots(): Date[] {
   const extraHours = [9, 11, 13, 15, 17];
   extraHours.forEach(hour => {
     const slot1 = new Date(tomorrow);
-    slot1.setHours(hour, 0, 0, 0);
+    slot1.setUTCHours(hour - TIMEZONE_OFFSET_HOURS, 0, 0, 0);
     slots.push(slot1);
     
     const slot2 = new Date(dayAfter);
-    slot2.setHours(hour, 0, 0, 0);
+    slot2.setUTCHours(hour - TIMEZONE_OFFSET_HOURS, 0, 0, 0);
     slots.push(slot2);
   });
   
